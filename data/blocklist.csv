@@ -1,0 +1,9 @@
+type,pattern,category,severity,description
+domain,paypa1-security-verify.xyz,phishing,CRITICAL,Spoofed PayPal credential harvester
+domain,g00gle-account-update.top,phishing,CRITICAL,Spoofed Google account phishing portal
+domain,m1crosoft-login-auth.click,phishing,HIGH,Spoofed Microsoft login portal
+domain,bankofamerica-verify-alert.info,phishing,CRITICAL,Banking scam portal
+ip,192.168.1.1,ip-literal,MEDIUM,Private network host IP literal
+ip,45.142.214.120,malware-host,CRITICAL,Known ransomware C2 server host
+url,http://malware-download-center.xyz/payload.exe,malware,CRITICAL,Direct executable malware link
+url,http://secure-login-verify-account.click/auth,phishing,HIGH,Phishing authentication endpoint

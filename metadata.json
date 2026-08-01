@@ -1,0 +1,6 @@
+{
+  "name": "CyberGuard",
+  "description": "An honest cybersecurity hub for scanning email breaches, tracking security histories, managing subscriptions, and exploring security tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

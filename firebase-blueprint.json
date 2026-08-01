@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account registration and subscription profile details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique Firebase Authentication UID" },
+        "email": { "type": "string", "format": "email", "description": "The registered email address" },
+        "fullName": { "type": "string", "description": "User's full name" },
+        "mobileNumber": { "type": "string", "description": "User's verified mobile number" },
+        "otpDeliveryPref": { "type": "string", "enum": ["email", "mobile"], "description": "Preferred verification channel" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User system authorization role" },
+        "plan": { "type": "string", "enum": ["free", "pro"], "description": "User's account tier" },
+        "scansThisMonth": { "type": "integer", "description": "Number of scans executed in current billing cycle" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The exact registration timestamp" }
+      },
+      "required": ["id", "email", "createdAt", "role", "plan"]
+    },
+    "ScanResult": {
+      "title": "Scan Result",
+      "description": "Security exposure threat scan result and details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique scan identifier" },
+        "userId": { "type": "string", "description": "Firebase UID of the owner" },
+        "targetEmail": { "type": "string", "description": "Email address scanned" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Audit execution timestamp" },
+        "resultCount": { "type": "integer", "description": "Number of found exposures" },
+        "riskScore": { "type": "integer", "description": "Calculated cybersecurity risk score" },
+        "aiSummary": { "type": "string", "description": "Gemini AI vulnerability summary markdown" },
+        "scanType": { "type": "string", "enum": ["email", "link", "image"], "description": "Scan modality" }
+      },
+      "required": ["id", "userId", "targetEmail", "timestamp", "riskScore", "scanType"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Durable profile storage mapped by Firebase auth ID"
+    },
+    "/scans/{scanId}": {
+      "schema": "ScanResult",
+      "description": "Historical breach scans and risk evaluations"
+    }
+  }
+}

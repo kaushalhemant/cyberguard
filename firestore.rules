@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is accessing their own document
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Enforce valid document ID structure (alphanumeric, dash, underscore)
+    function isValidId(id) {
+      return id.matches('^[a-zA-Z0-9_\\-]+$') && id.size() <= 128;
+    }
+
+    // Rules for User profiles
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId) 
+        && request.resource.data.keys().hasAll(['email', 'createdAt'])
+        && request.resource.data.email is string;
+      allow delete: if false; // Deletions of accounts are disabled by default
+    }
+
+    // Rules for Scans history
+    match /scans/{scanId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() 
+        && request.resource.data.userId == request.auth.uid
+        && isValidId(scanId);
+      allow update, delete: if false; // Scan results are historical and immutable
+    }
+
+    // Rules for Payments
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() 
+        && request.resource.data.userId == request.auth.uid
+        && isValidId(paymentId);
+      allow update, delete: if false; // Payment submissions are immutable
+    }
+  }
+}
