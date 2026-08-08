@@ -33,13 +33,28 @@ interface SystemStats {
   users: any[];
 }
 
+async function safeJsonResponse<T = any>(res: Response, defaultErr = 'Invalid response'): Promise<T> {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      return await res.json();
+    } catch {
+      throw new Error(defaultErr);
+    }
+  }
+  const text = await res.text();
+  const clean = text.replace(/<[^>]*>/g, '').trim().substring(0, 120);
+  if (!res.ok) throw new Error(`Server error (${res.status}): ${clean || res.statusText}`);
+  throw new Error(`Server returned non-JSON response (${res.status}): ${clean}`);
+}
+
 export default function AdminApp() {
+  const [adminToken, setAdminToken] = useState<string | null>(() => localStorage.getItem('cg_admin_master_token'));
   const [passcode, setPasscode] = useState('');
-  const [adminToken, setAdminToken] = useState<string | null>(localStorage.getItem('cg_admin_master_token'));
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'activity' | 'system' | 'users'>('activity');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'activity' | 'telemetry'>('overview');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [loading, setLoading] = useState(false);
 
@@ -51,6 +66,9 @@ export default function AdminApp() {
   const [actionCategory, setActionCategory] = useState<'all' | 'LOGIN' | 'SCAN' | 'REGISTER'>('all');
 
   const [selectedLog, setSelectedLog] = useState<ActivityLog | SystemLog | null>(null);
+  const [userSearch, setUserSearch] = useState('');
+  const [logSearch, setLogSearch] = useState('');
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
 
   // Login handler
   const handleLogin = async (e: React.FormEvent) => {
@@ -66,7 +84,7 @@ export default function AdminApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ passcode: passcode.trim() })
       });
-      const data = await res.json();
+      const data = await safeJsonResponse(res, 'Master Admin passcode verification failed.');
       if (!res.ok) {
         throw new Error(data.error || 'Master Admin passcode verification failed.');
       }
@@ -102,7 +120,7 @@ export default function AdminApp() {
         return;
       }
 
-      const statsData = await statsRes.json();
+      const statsData = await safeJsonResponse(statsRes, 'Failed to parse stats telemetry');
       setStats(statsData);
 
       const logsRes = await fetch('/api/admin/logs', {
@@ -111,7 +129,7 @@ export default function AdminApp() {
           'X-CyberGuard-Admin-Key': adminToken
         }
       });
-      const logsData = await logsRes.json();
+      const logsData = await safeJsonResponse(logsRes, 'Failed to parse logs telemetry');
       setActivityLogs(logsData.activityLogs || []);
       setSystemLogs(logsData.systemLogs || []);
     } catch (err) {

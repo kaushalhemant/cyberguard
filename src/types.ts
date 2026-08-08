@@ -102,3 +102,65 @@ export interface SystemLog {
   metadata?: Record<string, any>;
 }
 
+export interface OsintResult {
+  target: string;
+  resolvedIp: string;
+  hostname: string;
+  location: {
+    country: string;
+    city: string;
+    isp: string;
+    asn: string;
+    flag: string;
+  };
+  reputationScore: number; // 0 (Clean) to 100 (Malicious)
+  blacklists: { name: string; listed: boolean; category?: string }[];
+  openPorts: { port: number; service: string; state: 'open' | 'filtered' | 'closed'; risk: 'high' | 'medium' | 'low' }[];
+  dnsRecords: { type: string; value: string; status: 'ok' | 'warning' | 'missing' }[];
+  sslCert?: {
+    valid: boolean;
+    issuer: string;
+    expiresInDays: number;
+    cipher: string;
+    sanDomains: string[];
+  };
+  threatCategories: string[];
+  investigatorNotes?: string;
+  timestamp: string;
+}
+
+export interface HashAnalysisResult {
+  hash: string;
+  hashType: 'MD5' | 'SHA1' | 'SHA256' | 'UNKNOWN';
+  fileName?: string;
+  fileSizeBytes?: number;
+  detectedFormat: string;
+  magicBytes: string;
+  entropyScore: number; // 0 to 8
+  isPackedOrEncrypted: boolean;
+  malwareClassification: 'clean' | 'suspicious' | 'malicious' | 'unknown';
+  threatFamily?: string;
+  matchedYaraRules: string[];
+  threatIndicators: string[];
+  recommendation: string;
+  timestamp: string;
+}
+
+export interface SocIncident {
+  id: string;
+  title: string;
+  target: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  status: 'new' | 'investigating' | 'mitigated' | 'escalated' | 'false_positive';
+  category: 'Phishing' | 'Ransomware' | 'Zero-Day' | 'Credential Abuse' | 'DDoS' | 'Malware Payload';
+  mitreTactic: string;
+  mitreTechniqueId: string;
+  description: string;
+  affectedAsset: string;
+  assignedOfficer: string;
+  containmentActionTaken?: string;
+  notes: string[];
+  timestamp: string;
+}
+
+

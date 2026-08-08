@@ -3,6 +3,8 @@ import { AlertTriangle, TrendingUp, RefreshCw, ShieldAlert, Bot, ChevronDown, Ch
 import { motion } from 'motion/react';
 import { ThreatIntelligenceReport, ThreatIntelligenceAlert, PhishingTactic } from '../types';
 
+import { safeJsonResponse } from '../lib/api';
+
 interface ThreatIntelligenceProps {
   token: string;
 }
@@ -23,10 +25,7 @@ export default function ThreatIntelligence({ token }: ThreatIntelligenceProps) {
           'Authorization': `Bearer ${token}`
         }
       });
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data: ThreatIntelligenceReport = await response.json();
+      const data: ThreatIntelligenceReport = await safeJsonResponse(response, 'Failed to fetch threat intelligence');
       setReport(data);
     } catch (err: any) {
       console.error('Failed to load threat intelligence:', err);

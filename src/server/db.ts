@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { User, Breach, ScanResult, PaymentRequest, ActivityLog, SystemLog } from '../types';
+import { supabaseServer, isSupabaseConfigured } from './supabase';
 
 const DB_FILE = path.join(process.cwd(), 'db.json');
 
@@ -13,7 +14,7 @@ interface DbSchema {
   systemLogs?: SystemLog[];
 }
 
-// Initial default state with seeded data
+// Initial default state with seeded data for local fallback
 const initialDb: DbSchema = {
   users: {
     'admin@cyberguard.com': {
@@ -30,7 +31,7 @@ const initialDb: DbSchema = {
       email: 'user@cyberguard.com',
       passwordHash: hashPassword('password123'),
       role: 'user',
-      plan: 'free',
+      plan: 'pro',
       scansThisMonth: 1,
       createdAt: new Date().toISOString(),
     }
@@ -92,7 +93,7 @@ export function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
-// AES-256-CBC database encryption at rest to protect personal details
+// AES-256-CBC database encryption at rest to protect personal details in local JSON storage
 const ENCRYPTION_ALGORITHM = 'aes-256-cbc';
 const ENCRYPTION_SECRET = process.env.DB_ENCRYPTION_SECRET || 'cyberguard-soc-default-super-secret-key-32bytes!';
 const ENCRYPTION_KEY = crypto.createHash('sha256').update(ENCRYPTION_SECRET).digest();
@@ -109,7 +110,6 @@ export function decryptData(encryptedText: string): string {
   try {
     const parts = encryptedText.split(':');
     if (parts.length !== 2) {
-      // Not encrypted format (starts with standard JSON or corrupted), return as-is for migration
       return encryptedText;
     }
     const iv = Buffer.from(parts[0], 'hex');
@@ -124,21 +124,20 @@ export function decryptData(encryptedText: string): string {
   }
 }
 
-class JsonDb {
+class HybridDb {
   private data: DbSchema;
 
   constructor() {
     this.data = { ...initialDb };
-    this.load();
+    this.loadLocal();
   }
 
-  private load() {
+  private loadLocal() {
     try {
       if (fs.existsSync(DB_FILE)) {
         const fileContent = fs.readFileSync(DB_FILE, 'utf8').trim();
         let decryptedContent = fileContent;
         let wasPlain = false;
-        // If it starts with '{', it's unencrypted JSON, otherwise it's encrypted
         if (fileContent.startsWith('{')) {
           decryptedContent = fileContent;
           wasPlain = true;
@@ -146,44 +145,82 @@ class JsonDb {
           decryptedContent = decryptData(fileContent);
         }
         this.data = JSON.parse(decryptedContent);
-        // Ensure admin always exists in loaded file too
         if (!this.data.users['admin@cyberguard.com']) {
           this.data.users['admin@cyberguard.com'] = initialDb.users['admin@cyberguard.com'];
         }
         if (wasPlain) {
-          this.save(); // Upgrade database to AES-256 encrypted-at-rest immediately
+          this.saveLocal();
         }
       } else {
-        this.save();
+        this.saveLocal();
       }
     } catch (err) {
-      console.warn('Database loading failed. Running in-memory instead.', err);
+      console.warn('Local database loading failed. Running in-memory instead.', err);
     }
   }
 
-  private save() {
+  private saveLocal() {
     try {
       const jsonString = JSON.stringify(this.data, null, 2);
       const encryptedString = encryptData(jsonString);
       fs.writeFileSync(DB_FILE, encryptedString, 'utf8');
     } catch (err) {
-      console.error('Failed to write database file:', err);
+      console.error('Failed to write local database file:', err);
     }
   }
 
-  // User Operations
-  getUser(email: string) {
+  // ----------------------------------------------------------------
+  // USER OPERATIONS
+  // ----------------------------------------------------------------
+  async getUser(email: string): Promise<(User & { passwordHash: string }) | null> {
     const cleanedEmail = email.toLowerCase().trim();
+
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        const { data, error } = await supabaseServer
+          .from('users')
+          .select('*')
+          .eq('email', cleanedEmail)
+          .maybeSingle();
+
+        if (!error && data) {
+          return {
+            id: data.id,
+            email: data.email,
+            passwordHash: data.password_hash,
+            fullName: data.full_name,
+            mobileNumber: data.mobile_number,
+            otpDeliveryPref: data.otp_delivery_pref,
+            role: data.role,
+            plan: 'pro',
+            scansThisMonth: data.scans_this_month || 0,
+            createdAt: data.created_at,
+          };
+        }
+      } catch (err) {
+        console.error('[Supabase getUser Error]:', err);
+      }
+    }
+
+    // Fallback to local storage
     const user = this.data.users[cleanedEmail];
     if (!user) return null;
-    user.plan = 'pro';
-    return user;
+    return { ...user, plan: 'pro' };
   }
 
-  createUser(email: string, passwordHash: string, fullName?: string, mobileNumber?: string, otpDeliveryPref?: 'email' | 'mobile'): User {
+  async createUser(
+    email: string,
+    passwordHash: string,
+    fullName?: string,
+    mobileNumber?: string,
+    otpDeliveryPref?: 'email' | 'mobile'
+  ): Promise<User> {
     const cleanedEmail = email.toLowerCase().trim();
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+
     const newUser: User & { passwordHash: string } = {
-      id: crypto.randomUUID(),
+      id,
       email: cleanedEmail,
       passwordHash,
       fullName,
@@ -192,142 +229,405 @@ class JsonDb {
       role: 'user',
       plan: 'pro',
       scansThisMonth: 0,
-      createdAt: new Date().toISOString(),
+      createdAt,
     };
+
+    // Always update local memory/file fallback
     this.data.users[cleanedEmail] = newUser;
-    this.save();
-    
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    this.saveLocal();
+
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        await supabaseServer.from('users').insert({
+          id,
+          email: cleanedEmail,
+          password_hash: passwordHash,
+          full_name: fullName || null,
+          mobile_number: mobileNumber || null,
+          otp_delivery_pref: otpDeliveryPref || 'email',
+          role: 'user',
+          plan: 'pro',
+          scans_this_month: 0,
+          created_at: createdAt,
+        });
+      } catch (err) {
+        console.error('[Supabase createUser Error]:', err);
+      }
+    }
+
     const { passwordHash: _, ...userWithoutHash } = newUser;
     return userWithoutHash;
   }
 
-  updateUser(email: string, updates: Partial<User>) {
+  async updateUser(email: string, updates: Partial<User>): Promise<User | null> {
     const cleanedEmail = email.toLowerCase().trim();
+
+    // Local DB update
     if (this.data.users[cleanedEmail]) {
       this.data.users[cleanedEmail] = {
         ...this.data.users[cleanedEmail],
         ...updates,
         plan: 'pro'
       } as any;
-      this.save();
-      return this.data.users[cleanedEmail];
+      this.saveLocal();
     }
-    return null;
+
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        const updatePayload: Record<string, any> = {};
+        if (updates.fullName !== undefined) updatePayload.full_name = updates.fullName;
+        if (updates.mobileNumber !== undefined) updatePayload.mobile_number = updates.mobileNumber;
+        if (updates.otpDeliveryPref !== undefined) updatePayload.otp_delivery_pref = updates.otpDeliveryPref;
+        if (updates.role !== undefined) updatePayload.role = updates.role;
+        if (updates.scansThisMonth !== undefined) updatePayload.scans_this_month = updates.scansThisMonth;
+
+        await supabaseServer
+          .from('users')
+          .update(updatePayload)
+          .eq('email', cleanedEmail);
+      } catch (err) {
+        console.error('[Supabase updateUser Error]:', err);
+      }
+    }
+
+    return this.getUser(cleanedEmail);
   }
 
-  getAllUsers(): User[] {
+  async getAllUsers(): Promise<User[]> {
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        const { data, error } = await supabaseServer
+          .from('users')
+          .select('id, email, full_name, mobile_number, otp_delivery_pref, role, plan, scans_this_month, created_at');
+
+        if (!error && data) {
+          return data.map((u: any) => ({
+            id: u.id,
+            email: u.email,
+            fullName: u.full_name,
+            mobileNumber: u.mobile_number,
+            otpDeliveryPref: u.otp_delivery_pref,
+            role: u.role,
+            plan: 'pro',
+            scansThisMonth: u.scans_this_month || 0,
+            createdAt: u.created_at,
+          }));
+        }
+      } catch (err) {
+        console.error('[Supabase getAllUsers Error]:', err);
+      }
+    }
+
     return Object.values(this.data.users).map(({ passwordHash, ...user }) => ({ ...user, plan: 'pro' }));
   }
 
-  // Scan Operations
-  getScans(email: string): ScanResult[] {
-    return this.data.scans[email.toLowerCase().trim()] || [];
+  // ----------------------------------------------------------------
+  // SCAN OPERATIONS
+  // ----------------------------------------------------------------
+  async getScans(email: string): Promise<ScanResult[]> {
+    const cleanedEmail = email.toLowerCase().trim();
+
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        const { data, error } = await supabaseServer
+          .from('scans')
+          .select('*')
+          .eq('user_email', cleanedEmail)
+          .order('timestamp', { ascending: false });
+
+        if (!error && data) {
+          return data.map((s: any) => ({
+            id: s.id,
+            targetEmail: s.target_email,
+            timestamp: s.timestamp,
+            resultCount: s.result_count,
+            riskScore: s.risk_score,
+            aiSummary: s.ai_summary,
+            breaches: typeof s.breaches === 'string' ? JSON.parse(s.breaches) : (s.breaches || []),
+          }));
+        }
+      } catch (err) {
+        console.error('[Supabase getScans Error]:', err);
+      }
+    }
+
+    return this.data.scans[cleanedEmail] || [];
   }
 
-  addScan(email: string, scan: ScanResult) {
+  async addScan(email: string, scan: ScanResult): Promise<void> {
     const cleanedEmail = email.toLowerCase().trim();
+
+    // Local update
     if (!this.data.scans[cleanedEmail]) {
       this.data.scans[cleanedEmail] = [];
     }
     this.data.scans[cleanedEmail].unshift(scan);
-    
-    // Increment scans for the user
+
     if (this.data.users[cleanedEmail]) {
       this.data.users[cleanedEmail].scansThisMonth += 1;
     }
-    
-    this.save();
+    this.saveLocal();
+
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        await supabaseServer.from('scans').insert({
+          id: scan.id || crypto.randomUUID(),
+          user_email: cleanedEmail,
+          target_email: scan.targetEmail,
+          timestamp: scan.timestamp,
+          result_count: scan.resultCount,
+          risk_score: scan.riskScore,
+          ai_summary: scan.aiSummary,
+          breaches: scan.breaches,
+        });
+
+        // Increment scans_this_month in Supabase
+        const user = await this.getUser(cleanedEmail);
+        if (user) {
+          await supabaseServer
+            .from('users')
+            .update({ scans_this_month: (user.scansThisMonth || 0) + 1 })
+            .eq('email', cleanedEmail);
+        }
+      } catch (err) {
+        console.error('[Supabase addScan Error]:', err);
+      }
+    }
   }
 
-  clearScans(email: string) {
+  async clearScans(email: string): Promise<void> {
     const cleanedEmail = email.toLowerCase().trim();
     this.data.scans[cleanedEmail] = [];
-    this.save();
+    this.saveLocal();
+
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        await supabaseServer
+          .from('scans')
+          .delete()
+          .eq('user_email', cleanedEmail);
+      } catch (err) {
+        console.error('[Supabase clearScans Error]:', err);
+      }
+    }
   }
 
-  // Payment Operations (Deprecating - All users have free Pro access)
-  getPayments(): PaymentRequest[] {
+  // ----------------------------------------------------------------
+  // PAYMENT OPERATIONS
+  // ----------------------------------------------------------------
+  async getPayments(): Promise<PaymentRequest[]> {
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        const { data, error } = await supabaseServer.from('payments').select('*');
+        if (!error && data) {
+          return data.map((p: any) => ({
+            id: p.id,
+            email: p.user_email,
+            utr: p.utr,
+            status: p.status,
+            planType: p.plan_type,
+            submittedAt: p.submitted_at,
+            approvedAt: p.approved_at,
+          }));
+        }
+      } catch (err) {
+        console.error('[Supabase getPayments Error]:', err);
+      }
+    }
     return this.data.payments || [];
   }
 
-  getPaymentByUtr(utr: string): PaymentRequest | null {
-    return null;
+  async getPaymentByUtr(utr: string): Promise<PaymentRequest | null> {
+    const payments = await this.getPayments();
+    return payments.find(p => p.utr.toLowerCase() === utr.trim().toLowerCase()) || null;
   }
 
-  getPendingPaymentForUser(email: string): PaymentRequest | null {
-    return null;
-  }
-
-  submitPayment(email: string, utr: string, planType?: 'weekly' | 'monthly'): PaymentRequest {
+  async submitPayment(email: string, utr: string, planType?: 'weekly' | 'monthly'): Promise<PaymentRequest> {
     const cleanedEmail = email.toLowerCase().trim();
+    const id = crypto.randomUUID();
+    const submittedAt = new Date().toISOString();
+
     const newPayment: PaymentRequest = {
-      id: crypto.randomUUID(),
+      id,
       email: cleanedEmail,
       utr: utr.trim(),
       status: 'approved',
       planType: planType || 'monthly',
-      submittedAt: new Date().toISOString()
+      submittedAt
     };
+
+    if (!this.data.payments) this.data.payments = [];
+    this.data.payments.unshift(newPayment);
+    this.saveLocal();
+
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        await supabaseServer.from('payments').insert({
+          id,
+          user_email: cleanedEmail,
+          utr: utr.trim(),
+          status: 'approved',
+          plan_type: planType || 'monthly',
+          submitted_at: submittedAt,
+        });
+      } catch (err) {
+        console.error('[Supabase submitPayment Error]:', err);
+      }
+    }
+
     return newPayment;
   }
 
-  approvePayment(paymentId: string): PaymentRequest | null {
-    return null;
-  }
+  // ----------------------------------------------------------------
+  // CENTRAL AUDIT & TELEMETRY LOGGING OPERATIONS
+  // ----------------------------------------------------------------
+  async logUserActivity(
+    email: string,
+    action: string,
+    details: string,
+    ip: string = '127.0.0.1',
+    status: 'success' | 'warning' | 'failed' = 'success'
+  ): Promise<ActivityLog> {
+    const cleanedEmail = email.toLowerCase().trim();
+    const id = crypto.randomUUID();
+    const timestamp = new Date().toISOString();
 
-  rejectPayment(paymentId: string): PaymentRequest | null {
-    return null;
-  }
-
-  // Central Audit & Telemetry Logging Operations
-  logUserActivity(email: string, action: string, details: string, ip: string = '127.0.0.1', status: 'success' | 'warning' | 'failed' = 'success'): ActivityLog {
-    if (!this.data.activityLogs) this.data.activityLogs = [];
     const log: ActivityLog = {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      email: email.toLowerCase().trim(),
+      id,
+      timestamp,
+      email: cleanedEmail,
       action,
       details,
       ip,
       status
     };
+
+    if (!this.data.activityLogs) this.data.activityLogs = [];
     this.data.activityLogs.unshift(log);
     if (this.data.activityLogs.length > 1000) {
       this.data.activityLogs = this.data.activityLogs.slice(0, 1000);
     }
-    this.save();
+    this.saveLocal();
+
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        await supabaseServer.from('activity_logs').insert({
+          id,
+          email: cleanedEmail,
+          action,
+          details,
+          ip,
+          status,
+          timestamp
+        });
+      } catch (err) {
+        console.error('[Supabase logUserActivity Error]:', err);
+      }
+    }
+
     return log;
   }
 
-  logSystemEvent(level: 'info' | 'warn' | 'error' | 'http', category: string, message: string, metadata?: Record<string, any>): SystemLog {
-    if (!this.data.systemLogs) this.data.systemLogs = [];
+  async logSystemEvent(
+    level: 'info' | 'warn' | 'error' | 'http',
+    category: string,
+    message: string,
+    metadata?: Record<string, any>
+  ): Promise<SystemLog> {
+    const id = crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+
     const log: SystemLog = {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
+      id,
+      timestamp,
       level,
       category,
       message,
       metadata
     };
+
+    if (!this.data.systemLogs) this.data.systemLogs = [];
     this.data.systemLogs.unshift(log);
     if (this.data.systemLogs.length > 2000) {
       this.data.systemLogs = this.data.systemLogs.slice(0, 2000);
     }
-    this.save();
+    this.saveLocal();
+
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        await supabaseServer.from('system_logs').insert({
+          id,
+          level,
+          category,
+          message,
+          metadata,
+          timestamp
+        });
+      } catch (err) {
+        console.error('[Supabase logSystemEvent Error]:', err);
+      }
+    }
+
     return log;
   }
 
-  getActivityLogs(limit: number = 200): ActivityLog[] {
+  async getActivityLogs(limit: number = 200): Promise<ActivityLog[]> {
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        const { data, error } = await supabaseServer
+          .from('activity_logs')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(limit);
+
+        if (!error && data) {
+          return data.map((l: any) => ({
+            id: l.id,
+            timestamp: l.timestamp,
+            email: l.email,
+            action: l.action,
+            details: l.details,
+            ip: l.ip,
+            status: l.status,
+          }));
+        }
+      } catch (err) {
+        console.error('[Supabase getActivityLogs Error]:', err);
+      }
+    }
+
     if (!this.data.activityLogs) return [];
     return this.data.activityLogs.slice(0, limit);
   }
 
-  getSystemLogs(limit: number = 200): SystemLog[] {
+  async getSystemLogs(limit: number = 200): Promise<SystemLog[]> {
+    if (isSupabaseConfigured && supabaseServer) {
+      try {
+        const { data, error } = await supabaseServer
+          .from('system_logs')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(limit);
+
+        if (!error && data) {
+          return data.map((l: any) => ({
+            id: l.id,
+            timestamp: l.timestamp,
+            level: l.level,
+            category: l.category,
+            message: l.message,
+            metadata: l.metadata,
+          }));
+        }
+      } catch (err) {
+        console.error('[Supabase getSystemLogs Error]:', err);
+      }
+    }
+
     if (!this.data.systemLogs) return [];
     return this.data.systemLogs.slice(0, limit);
   }
 }
 
-export const db = new JsonDb();
+export const db = new HybridDb();
 export default db;

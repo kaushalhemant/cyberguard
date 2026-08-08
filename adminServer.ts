@@ -32,8 +32,16 @@ app.all('/api/admin/*', async (req, res) => {
     };
 
     const response = await fetch(targetUrl, options);
-    const data = await response.json();
-    res.status(response.status).json(data);
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      res.status(response.status).json(data);
+    } else {
+      const text = await response.text();
+      res.status(response.status).json({
+        error: text.replace(/<[^>]*>/g, '').trim().substring(0, 200) || `Main server returned status ${response.status}`
+      });
+    }
   } catch (err: any) {
     console.error('[Admin Server Proxy Error]:', err.message || err);
     res.status(500).json({ error: 'Failed to proxy request to main Security Log Hub.' });

@@ -5,6 +5,7 @@ import PrivacyStatementModal from './PrivacyStatementModal';
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db as firestoreDb } from '../lib/firebase';
+import { safeJsonResponse } from '../lib/api';
 
 interface AuthProps {
   onAuthSuccess: (user: User, token: string, googleToken?: string | null) => void;
@@ -92,7 +93,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         }),
       });
 
-      const data = await response.json();
+      const data = await safeJsonResponse(response, 'Failed to dispatch verification OTP.');
       if (!response.ok) {
         throw new Error(data.error || 'Failed to dispatch verification OTP.');
       }
@@ -154,7 +155,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
           }),
         });
 
-        const data = await response.json();
+        const data = await safeJsonResponse(response, 'Account creation failed.');
 
         if (!response.ok) {
           throw new Error(data.error || 'Something went wrong during account creation.');
@@ -184,7 +185,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             }),
           });
 
-          const data = await response.json();
+          const data = await safeJsonResponse(response, 'Session synchronization failed.');
 
           if (!response.ok) {
             throw new Error(data.error || 'Something went wrong during session synchronization.');
@@ -229,7 +230,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
               }),
             });
 
-            const data = await response.json();
+            const data = await safeJsonResponse(response, 'Account creation failed.');
 
             if (!response.ok) {
               throw new Error(data.error || 'Something went wrong during account creation.');
@@ -288,7 +289,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
           body: JSON.stringify({ email: email.trim(), password }),
         });
 
-        const data = await response.json();
+        const data = await safeJsonResponse(response, 'Authentication failed.');
 
         if (!response.ok) {
           throw new Error(data.error || 'Something went wrong during authentication.');
@@ -315,7 +316,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             }),
           });
 
-          const data = await response.json();
+          const data = await safeJsonResponse(response, 'Session synchronization failed.');
 
           if (!response.ok) {
             throw new Error(data.error || 'Something went wrong during session synchronization.');
@@ -352,7 +353,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
               body: JSON.stringify({ email: email.trim(), password }),
             });
 
-            const data = await response.json();
+            const data = await safeJsonResponse(response, 'Authentication failed.');
 
             if (!response.ok) {
               throw new Error(data.error || 'Something went wrong during authentication.');

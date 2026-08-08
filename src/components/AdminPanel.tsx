@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, Users, ShieldAlert, Check, X, Search, Activity, RefreshCw, Layers } from 'lucide-react';
 import { PaymentRequest, User } from '../types';
 
+import { safeJsonResponse } from '../lib/api';
+
 interface AdminPanelProps {
   token: string;
 }
@@ -26,7 +28,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       const statsRes = await fetch('/api/admin/stats', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const statsData = await statsRes.json();
+      const statsData = await safeJsonResponse<AdminStats>(statsRes, 'Failed to load admin analytics');
       setStats(statsData);
     } catch (err) {
       console.error('Failed to load admin dataset:', err);

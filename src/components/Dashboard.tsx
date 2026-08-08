@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, ShieldAlert, ShieldCheck, Mail, Search, History, LogOut, Terminal as TerminalIcon, Bot, Zap, Brain, Plus, ChevronRight, Lock, Bell, Users, Cpu, FileText, CheckCircle2, UserCheck, RefreshCw, Link2, Image, UploadCloud, Globe, Eye, FileImage, Trash2 } from 'lucide-react';
-import { User, ScanResult } from '../types';
+import { Shield, ShieldAlert, ShieldCheck, Mail, Search, History, LogOut, Terminal as TerminalIcon, Bot, Zap, Brain, Plus, ChevronRight, Lock, Bell, Users, Cpu, FileText, CheckCircle2, UserCheck, RefreshCw, Link2, Image, UploadCloud, Globe, Eye, FileImage, Trash2, Server, Activity, FileCode, AlertTriangle, Download, Database, Key, CheckSquare, Layers } from 'lucide-react';
+import { User, ScanResult, OsintResult, HashAnalysisResult, SocIncident } from '../types';
 import Terminal from './Terminal';
 import PrivacyStatementModal from './PrivacyStatementModal';
 import ThreatIntelligence from './ThreatIntelligence';
 import UsageAudit from './UsageAudit';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
+import { safeJsonResponse } from '../lib/api';
 
 interface DashboardProps {
   user: User;
@@ -29,9 +30,37 @@ export default function Dashboard({
   onUserUpdate,
   onNavigateAdmin
 }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState<'email' | 'link' | 'image' | 'grounding' | 'intelligence'>('email');
+  const [activeTab, setActiveTab] = useState<'email' | 'link' | 'image' | 'grounding' | 'intelligence' | 'osint' | 'hash' | 'siem' | 'stix'>('email');
   const [scanEmail, setScanEmail] = useState('');
   const [scanUrl, setScanUrl] = useState('');
+
+  // --- CYBERSECURITY OFFICIAL (SOC) STATES ---
+  // OSINT IP & Domain Inspector States
+  const [osintTarget, setOsintTarget] = useState('');
+  const [osintLoading, setOsintLoading] = useState(false);
+  const [osintResult, setOsintResult] = useState<OsintResult | null>(null);
+
+  // Malware Payload Hash Forensics States
+  const [hashInput, setHashInput] = useState('');
+  const [hashFileName, setHashFileName] = useState('');
+  const [hashLoading, setHashLoading] = useState(false);
+  const [hashResult, setHashResult] = useState<HashAnalysisResult | null>(null);
+
+  // SIEM Incident Response Matrix States
+  const [incidentsList, setIncidentsList] = useState<SocIncident[]>([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState<SocIncident | null>(null);
+  const [triageNote, setTriageNote] = useState('');
+  const [triageStatus, setTriageStatus] = useState<SocIncident['status']>('investigating');
+  const [containmentActionInput, setContainmentActionInput] = useState('');
+
+  // STIX 2.1 DFIR Evidence Bundle States
+  const [stixTarget, setStixTarget] = useState('');
+  const [stixHash, setStixHash] = useState('');
+  const [stixNotes, setStixNotes] = useState('');
+  const [stixBundleResult, setStixBundleResult] = useState<any | null>(null);
+  const [stixLoading, setStixLoading] = useState(false);
+
   
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -288,7 +317,7 @@ export default function Dashboard({
         }
       });
       if (response.ok) {
-        const data = await response.json();
+        const data = await safeJsonResponse(response);
         setScans(data.scans);
       }
     } catch (err) {
@@ -299,6 +328,115 @@ export default function Dashboard({
   useEffect(() => {
     fetchScansHistory();
   }, [token]);
+
+  // --- CYBERSECURITY OFFICIAL (SOC) HANDLERS ---
+  const handleOsintSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!osintTarget.trim()) return;
+    setOsintLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/soc/osint-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ target: osintTarget.trim() })
+      });
+      const data = await safeJsonResponse(response, 'Failed to perform OSINT lookup.');
+      if (!response.ok) throw new Error(data.error || 'OSINT resolution failed.');
+      setOsintResult(data);
+    } catch (err: any) {
+      setError(err.message || 'Error executing OSINT forensic inspection.');
+    } finally {
+      setOsintLoading(false);
+    }
+  };
+
+  const handleHashSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hashInput.trim()) return;
+    setHashLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/soc/hash-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ hash: hashInput.trim(), fileName: hashFileName.trim() })
+      });
+      const data = await safeJsonResponse(response, 'Failed to perform hash forensics.');
+      if (!response.ok) throw new Error(data.error || 'Hash forensics analysis failed.');
+      setHashResult(data);
+    } catch (err: any) {
+      setError(err.message || 'Error executing hash forensics lookup.');
+    } finally {
+      setHashLoading(false);
+    }
+  };
+
+  const fetchSocIncidents = async () => {
+    setIncidentsLoading(true);
+    try {
+      const response = await fetch('/api/soc/incidents', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await safeJsonResponse(response);
+        setIncidentsList(data.incidents || []);
+        if (data.incidents?.length > 0 && !selectedIncident) {
+          setSelectedIncident(data.incidents[0]);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch SOC incidents:', err);
+    } finally {
+      setIncidentsLoading(false);
+    }
+  };
+
+  const handleTriageSubmit = async (incidentId: string) => {
+    try {
+      const response = await fetch(`/api/soc/incidents/${incidentId}/triage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ status: triageStatus, note: triageNote, containmentAction: containmentActionInput })
+      });
+      if (response.ok) {
+        const data = await safeJsonResponse(response);
+        setSelectedIncident(data.incident);
+        setIncidentsList(prev => prev.map(inc => inc.id === incidentId ? data.incident : inc));
+        setTriageNote('');
+        setContainmentActionInput('');
+      }
+    } catch (err) {
+      console.error('Triage update failed:', err);
+    }
+  };
+
+  const handleStixExportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStixLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/soc/stix-export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ target: stixTarget, hash: stixHash, notes: stixNotes })
+      });
+      const data = await safeJsonResponse(response, 'Failed to export STIX evidence bundle.');
+      if (!response.ok) throw new Error(data.error || 'STIX bundle export failed.');
+      setStixBundleResult(data.stixBundle);
+    } catch (err: any) {
+      setError(err.message || 'Error generating STIX evidence export.');
+    } finally {
+      setStixLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'siem') {
+      fetchSocIncidents();
+    }
+  }, [activeTab]);
+
 
 
 
@@ -317,7 +455,7 @@ export default function Dashboard({
         },
         body: JSON.stringify({ query: groundingQuery.trim() })
       });
-      const data = await response.json();
+      const data = await safeJsonResponse(response, 'Failed to perform grounded web search.');
       if (!response.ok) {
         throw new Error(data.error || 'Failed to perform grounded web search.');
       }
@@ -351,7 +489,7 @@ export default function Dashboard({
         },
         body: JSON.stringify({ message: userMsg, taskType: intelTaskType })
       });
-      const data = await response.json();
+      const data = await safeJsonResponse(response, 'Failed to process intelligence request.');
       if (!response.ok) {
         throw new Error(data.error || 'Failed to process intelligence request.');
       }
@@ -721,6 +859,54 @@ export default function Dashboard({
             >
               <Bot className="w-3.5 h-3.5 text-cyan-400" />
               <span className="flex items-center gap-1">CYBERGUARD ASSISTANT</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('osint'); setError(null); setIsQuotaExceeded(false); }}
+              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'osint'
+                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5 text-emerald-400" />
+              <span>OSINT FORENSICS</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('hash'); setError(null); setIsQuotaExceeded(false); }}
+              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'hash'
+                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <FileCode className="w-3.5 h-3.5 text-purple-400" />
+              <span>MALWARE HASH LAB</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('siem'); setError(null); setIsQuotaExceeded(false); }}
+              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'siem'
+                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-amber-400" />
+              <span>SIEM INCIDENTS</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('stix'); setError(null); setIsQuotaExceeded(false); }}
+              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'stix'
+                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Download className="w-3.5 h-3.5 text-cyan-400" />
+              <span>STIX DFIR EXPORT</span>
             </button>
           </div>
 
@@ -1205,7 +1391,424 @@ export default function Dashboard({
             </div>
           )}
 
-          {/* Test cases assistance */}
+          {/* 6. OSINT FORENSICS TAB */}
+          {activeTab === 'osint' && (
+            <div className="space-y-5 animate-fade-in">
+              <form onSubmit={handleOsintSubmit} className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-emerald-400">
+                      <Globe className="w-5 h-5" />
+                    </span>
+                    <input
+                      type="text"
+                      value={osintTarget}
+                      onChange={(e) => setOsintTarget(e.target.value)}
+                      placeholder="Enter target IP address or domain (e.g. 185.220.101.5 or suspect-c2.net)..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-all font-mono"
+                      disabled={osintLoading}
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={osintLoading}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-emerald-400/20 transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0"
+                  >
+                    {osintLoading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Querying OSINT Nodes...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4" />
+                        <span>Inspect Target OSINT</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {osintResult && (
+                <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-5 space-y-5 animate-fade-in">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{osintResult.location.flag}</span>
+                        <h3 className="text-lg font-bold text-white font-mono">{osintResult.target}</h3>
+                        <span className="text-xs text-slate-400 font-mono">({osintResult.resolvedIp})</span>
+                      </div>
+                      <span className="text-xs text-slate-400 font-mono block mt-0.5">
+                        {osintResult.location.city}, {osintResult.location.country} • {osintResult.location.isp} ({osintResult.location.asn})
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="bg-slate-900 border border-slate-800 px-3.5 py-1.5 rounded-xl font-mono text-center">
+                        <span className="text-[9px] text-slate-500 uppercase block">Threat Score</span>
+                        <span className={`text-base font-bold ${osintResult.reputationScore > 50 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {osintResult.reputationScore} / 100
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Blacklist Status & Categories */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                        Threat Intelligence Blacklists
+                      </span>
+                      <div className="space-y-1.5">
+                        {osintResult.blacklists.map((bl, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs font-mono bg-slate-950/80 px-2.5 py-1.5 rounded border border-slate-850">
+                            <span className="text-slate-300">{bl.name}</span>
+                            <span className={bl.listed ? 'text-rose-400 font-bold' : 'text-emerald-400 font-semibold'}>
+                              {bl.listed ? `LISTED (${bl.category})` : 'CLEAN'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Open Ports & Services Audit */}
+                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Server className="w-3.5 h-3.5 text-cyan-400" />
+                        Port & Attack Surface Audit
+                      </span>
+                      <div className="space-y-1.5">
+                        {osintResult.openPorts.map((pt, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs font-mono bg-slate-950/80 px-2.5 py-1.5 rounded border border-slate-850">
+                            <div className="flex items-center gap-2">
+                              <span className="text-cyan-400 font-bold">:{pt.port}</span>
+                              <span className="text-slate-300">{pt.service}</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
+                              pt.state === 'open' ? (pt.risk === 'high' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400') : 'text-slate-600'
+                            }`}>
+                              {pt.state}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DNS & SSL Cert Inspection */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">DNS Infrastructure Records</span>
+                      <div className="space-y-1.5">
+                        {osintResult.dnsRecords.map((dns, i) => (
+                          <div key={i} className="bg-slate-950 p-2 rounded border border-slate-850 space-y-0.5">
+                            <div className="flex justify-between text-[10px] text-cyan-400 font-bold">
+                              <span>RECORD [{dns.type}]</span>
+                              <span className={dns.status === 'ok' ? 'text-emerald-400' : 'text-amber-400'}>{dns.status.toUpperCase()}</span>
+                            </div>
+                            <div className="text-slate-300 truncate">{dns.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {osintResult.sslCert && (
+                      <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">SSL/TLS Certificate Validity</span>
+                        <div className="bg-slate-950 p-2.5 rounded border border-slate-850 space-y-1 text-slate-300">
+                          <div><span className="text-slate-500">Issuer:</span> {osintResult.sslCert.issuer}</div>
+                          <div><span className="text-slate-500">Cipher:</span> {osintResult.sslCert.cipher}</div>
+                          <div><span className="text-slate-500">Expires in:</span> {osintResult.sslCert.expiresInDays} days</div>
+                          <div>
+                            <span className="text-slate-500 block">SAN Domains:</span>
+                            <span className="text-cyan-400">{osintResult.sslCert.sanDomains.join(', ')}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 7. MALWARE PAYLOAD HASH LAB TAB */}
+          {activeTab === 'hash' && (
+            <div className="space-y-5 animate-fade-in">
+              <form onSubmit={handleHashSubmit} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2 relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
+                      <FileCode className="w-5 h-5" />
+                    </span>
+                    <input
+                      type="text"
+                      value={hashInput}
+                      onChange={(e) => setHashInput(e.target.value)}
+                      placeholder="Paste MD5, SHA-1, or SHA-256 binary payload hash..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 transition-all font-mono"
+                      disabled={hashLoading}
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={hashLoading}
+                    className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-purple-400/20 transition-all shadow-lg shadow-purple-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55"
+                  >
+                    {hashLoading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Analyzing Hash...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4" />
+                        <span>Inspect Hash Forensics</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {hashResult && (
+                <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-5 space-y-5 animate-fade-in">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3 font-mono">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          hashResult.malwareClassification === 'malicious' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        }`}>
+                          {hashResult.malwareClassification.toUpperCase()}
+                        </span>
+                        {hashResult.threatFamily && (
+                          <span className="text-xs text-purple-400 font-bold">{hashResult.threatFamily}</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-300 font-bold block mt-1">{hashResult.fileName}</span>
+                      <span className="text-[10px] text-slate-500 block">Hash [{hashResult.hashType}]: {hashResult.hash}</span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-center">
+                      <span className="text-[9px] text-slate-500 uppercase block">Shannon Entropy</span>
+                      <span className="text-sm font-bold text-amber-400">{hashResult.entropyScore} / 8.00</span>
+                    </div>
+                  </div>
+
+                  {/* Format & Signature details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Magic Bytes & File Format</span>
+                      <div className="bg-slate-950 p-2.5 rounded border border-slate-850 space-y-1 text-slate-300">
+                        <div><span className="text-slate-500">Detected Format:</span> {hashResult.detectedFormat}</div>
+                        <div><span className="text-slate-500">Magic Bytes Hex:</span> <span className="text-purple-300">{hashResult.magicBytes}</span></div>
+                        <div><span className="text-slate-500">Packed / Encrypted Payload:</span> {hashResult.isPackedOrEncrypted ? 'YES (High Entropy)' : 'NO'}</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Matched YARA Signature Rules</span>
+                      <div className="space-y-1">
+                        {hashResult.matchedYaraRules.map((yr, i) => (
+                          <div key={i} className="bg-purple-950/20 text-purple-300 border border-purple-800/30 px-2.5 py-1 rounded text-xs">
+                            yara::{yr}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 space-y-1 font-mono">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4" />
+                      SOC Investigator Recommendation:
+                    </span>
+                    <p>{hashResult.recommendation}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 8. SIEM INCIDENTS TRIAGE TAB */}
+          {activeTab === 'siem' && (
+            <div className="space-y-5 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold uppercase font-mono text-amber-400 flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    SIEM Active Incident Command Matrix
+                  </h3>
+                  <span className="text-[10px] text-slate-500 font-mono">Real-time incident response queue & automated triage containment</span>
+                </div>
+                <button
+                  onClick={fetchSocIncidents}
+                  className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-mono text-slate-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${incidentsLoading ? 'animate-spin' : ''}`} />
+                  <span>Refresh Queue</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Incident Queue List */}
+                <div className="space-y-2 lg:col-span-1 max-h-[400px] overflow-y-auto pr-1">
+                  {incidentsList.map((inc) => (
+                    <div
+                      key={inc.id}
+                      onClick={() => { setSelectedIncident(inc); setTriageStatus(inc.status); }}
+                      className={`p-3 rounded-xl border text-xs font-mono cursor-pointer transition-all ${
+                        selectedIncident?.id === inc.id
+                          ? 'bg-amber-950/20 border-amber-500/50 text-white shadow-md'
+                          : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-bold text-amber-400">{inc.id}</span>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                          inc.severity === 'critical' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-amber-500/20 text-amber-400'
+                        }`}>
+                          {inc.severity}
+                        </span>
+                      </div>
+                      <h4 className="font-semibold text-slate-200 truncate">{inc.title}</h4>
+                      <span className="text-[10px] text-slate-500 block mt-1">Status: {inc.status.toUpperCase()}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Incident Details & Triage Actions */}
+                {selectedIncident && (
+                  <div className="lg:col-span-2 bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-4 text-xs font-mono">
+                    <div className="flex justify-between items-start border-b border-slate-800 pb-2.5">
+                      <div>
+                        <span className="text-amber-400 font-bold text-sm block">{selectedIncident.id}: {selectedIncident.title}</span>
+                        <span className="text-slate-500 text-[10px]">Target: {selectedIncident.target} • Asset: {selectedIncident.affectedAsset}</span>
+                      </div>
+                      <span className="px-2.5 py-1 rounded bg-slate-900 text-slate-300 font-bold text-[10px]">
+                        MITRE: {selectedIncident.mitreTechniqueId}
+                      </span>
+                    </div>
+
+                    <p className="text-slate-300 font-sans text-xs leading-relaxed">{selectedIncident.description}</p>
+
+                    {/* Triage Form Controls */}
+                    <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Execute Incident Triage Playbook:</span>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          value={triageStatus}
+                          onChange={(e) => setTriageStatus(e.target.value as any)}
+                          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
+                        >
+                          <option value="investigating">INVESTIGATING</option>
+                          <option value="mitigated">MITIGATED</option>
+                          <option value="escalated">ESCALATED</option>
+                          <option value="false_positive">FALSE POSITIVE</option>
+                        </select>
+
+                        <input
+                          type="text"
+                          value={containmentActionInput}
+                          onChange={(e) => setContainmentActionInput(e.target.value)}
+                          placeholder="Containment action (e.g. Block IP at Firewall)..."
+                          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={triageNote}
+                          onChange={(e) => setTriageNote(e.target.value)}
+                          placeholder="Add official officer investigation notes..."
+                          className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleTriageSubmit(selectedIncident.id)}
+                          className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs transition-all cursor-pointer"
+                        >
+                          Update Triage
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 9. STIX 2.1 DFIR EVIDENCE EXPORT TAB */}
+          {activeTab === 'stix' && (
+            <div className="space-y-5 animate-fade-in">
+              <form onSubmit={handleStixExportSubmit} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={stixTarget}
+                    onChange={(e) => setStixTarget(e.target.value)}
+                    placeholder="Target IP address or domain..."
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-mono outline-none focus:border-cyan-500"
+                  />
+                  <input
+                    type="text"
+                    value={stixHash}
+                    onChange={(e) => setStixHash(e.target.value)}
+                    placeholder="SHA-256 payload hash string..."
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-mono outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={stixNotes}
+                    onChange={(e) => setStixNotes(e.target.value)}
+                    placeholder="Official forensic evidence summary / chain of custody notes..."
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-sans outline-none focus:border-cyan-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={stixLoading}
+                    className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    {stixLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    <span>Generate STIX 2.1 Bundle</span>
+                  </button>
+                </div>
+              </form>
+
+              {stixBundleResult && (
+                <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 space-y-3 font-mono text-xs">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span className="text-cyan-400 font-bold flex items-center gap-2">
+                      <FileCode className="w-4 h-4" />
+                      STIX 2.1 Evidence Bundle JSON
+                    </span>
+                    <button
+                      onClick={() => {
+                        const blob = new Blob([JSON.stringify(stixBundleResult, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `stix-bundle-${stixBundleResult.id}.json`;
+                        a.click();
+                      }}
+                      className="bg-slate-900 hover:bg-slate-800 text-cyan-300 px-3 py-1 rounded border border-slate-800 text-[10px] font-bold cursor-pointer"
+                    >
+                      Download JSON File
+                    </button>
+                  </div>
+                  <pre className="p-3 bg-slate-900/60 rounded-xl text-slate-300 max-h-[300px] overflow-y-auto text-[11px] leading-relaxed">
+                    {JSON.stringify(stixBundleResult, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
           <div className="mt-4 pt-4 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500 font-mono">
             {activeTab === 'email' && (
               <span>💡 Tip: Test <span className="text-emerald-400 select-all font-semibold">secure@cyberguard.com</span> to experience a clean 0-breach status.</span>

@@ -49,12 +49,88 @@ export default function Terminal() {
 
     switch (command) {
       case 'help':
-        addLog('Available commands:', 'success');
-        addLog('  cyberguard-scan <email>  - Run deep AI breach search on target email', 'output');
-        addLog('  nmap <host/IP>          - Simulate a stealth port scan on target domain', 'output');
-        addLog('  whois <domain>          - Retrieve registrar registry records', 'output');
-        addLog('  clear                   - Clear the screen buffer logs', 'output');
+        addLog('CyberGuard Official SOC Security Commands:', 'success');
+        addLog('  soc-osint <ip/domain>     - Perform deep OSINT IP forensic inspection & port audit', 'output');
+        addLog('  soc-hash <sha256/md5>     - Analyze malware binary hash, entropy & YARA matches', 'output');
+        addLog('  soc-triage <incident-id>  - Update SIEM incident status & containment playbook', 'output');
+        addLog('  stix-export <target>      - Generate STIX 2.1 evidence bundle JSON', 'output');
+        addLog('  cyberguard-scan <email>   - Run deep AI breach search on target email', 'output');
+        addLog('  nmap <host/IP>           - Stealth port scan on target host', 'output');
+        addLog('  whois <domain>           - Retrieve registrar WHOIS records', 'output');
+        addLog('  clear                    - Clear the terminal screen buffer', 'output');
         break;
+
+      case 'soc-osint': {
+        const target = args[1];
+        if (!target) {
+          addLog('Error: Specify IP or domain. Example: soc-osint 185.220.101.5', 'error');
+          break;
+        }
+        addLog(`[~] Dispatching OSINT Forensic Query for target: ${target}...`, 'output');
+        fetch('/api/soc/osint-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) {
+              addLog(`[-] OSINT Error: ${data.error}`, 'error');
+            } else {
+              addLog(`[+] OSINT Target: ${data.target} -> Resolved IP: ${data.resolvedIp}`, 'success');
+              addLog(`    Geo: ${data.location.city}, ${data.location.country} (${data.location.flag}) | ISP: ${data.location.isp}`, 'output');
+              addLog(`    Threat Score: ${data.reputationScore}/100 | Blacklists Listed: ${data.blacklists.filter((b: any) => b.listed).length}`, 'error');
+              addLog(`    Open Ports: ${data.openPorts.filter((p: any) => p.state === 'open').map((p: any) => `${p.port}/${p.service}`).join(', ') || 'None'}`, 'output');
+            }
+          })
+          .catch(err => addLog(`[-] Failed to query OSINT API: ${err.message}`, 'error'));
+        break;
+      }
+
+      case 'soc-hash': {
+        const hashVal = args[1];
+        if (!hashVal) {
+          addLog('Error: Specify binary hash string. Example: soc-hash e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'error');
+          break;
+        }
+        addLog(`[~] Analyzing Cryptographic Hash Forensics: ${hashVal}...`, 'output');
+        fetch('/api/soc/hash-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hash: hashVal })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) {
+              addLog(`[-] Hash Forensics Error: ${data.error}`, 'error');
+            } else {
+              addLog(`[+] Hash Type: ${data.hashType} | Format: ${data.detectedFormat}`, 'success');
+              addLog(`    Entropy Score: ${data.entropyScore}/8.00 (Packed/Obfuscated: ${data.isPackedOrEncrypted ? 'YES' : 'NO'})`, 'output');
+              addLog(`    Classification: ${data.malwareClassification.toUpperCase()} | Threat Family: ${data.threatFamily || 'None'}`, data.malwareClassification === 'malicious' ? 'error' : 'success');
+              addLog(`    YARA Rules Matched: ${data.matchedYaraRules.join(', ')}`, 'output');
+            }
+          })
+          .catch(err => addLog(`[-] Hash lookup failed: ${err.message}`, 'error'));
+        break;
+      }
+
+      case 'stix-export': {
+        const target = args[1] || '185.220.101.5';
+        addLog(`[~] Generating STIX 2.1 Threat Evidence Bundle for: ${target}...`, 'output');
+        fetch('/api/soc/stix-export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target, notes: 'Terminal CLI STIX Export' })
+        })
+          .then(res => res.json())
+          .then(data => {
+            addLog(`[+] STIX Bundle Created: ${data.stixBundle.id}`, 'success');
+            addLog(`    Digital Signature Seal: ${data.stixBundle.chainOfCustody.digitalSignatureSeal.substring(0, 32)}...`, 'output');
+            addLog('    Official DFIR Evidence Bundle ready for agency reporting.', 'success');
+          })
+          .catch(err => addLog(`[-] STIX export error: ${err.message}`, 'error'));
+        break;
+      }
 
       case 'clear':
         setLogs([]);
