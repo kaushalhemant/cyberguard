@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, RefreshCw, ChevronLeft, Sun, Moon, Lock, ShieldAlert, Award } from 'lucide-react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { User, ScanResult } from './types';
 import Dashboard from './components/Dashboard';
 import ReportView from './components/ReportView';
@@ -173,6 +174,7 @@ export default function App() {
         <p className="mt-1 text-slate-600">Enterprise Cybersecurity Official Edition - All Threat Scanning & Forensic Suite Features Unlocked.</p>
       </footer>
 
+      <SpeedInsights />
     </div>
   );
 }
