@@ -158,6 +158,13 @@ export async function generateBreachReportSummary(
  * 2. LINK / URL SAFETY AI INSPECTOR
  */
 export async function generateLinkThreatReport(url: string): Promise<ThreatReport> {
+  try {
+    const liveReport = await GeminiModule.generateLinkThreatReport(url);
+    if (liveReport && !liveReport.aiSummary.includes('AI Scan Offline Fallback')) {
+      return liveReport;
+    }
+  } catch (e) {}
+
   const threats: string[] = [];
   let riskScore = 10;
   const lowercaseUrl = url.toLowerCase();
@@ -230,6 +237,13 @@ export async function generateImageThreatReport(
   mimeType: string,
   filename: string
 ): Promise<ThreatReport> {
+  try {
+    const liveReport = await GeminiModule.generateImageThreatReport(base64Image, mimeType, filename);
+    if (liveReport && !liveReport.aiSummary.includes('AI Vision Scan Offline Fallback')) {
+      return liveReport;
+    }
+  } catch (e) {}
+
   let riskScore = 15;
   const threats: string[] = [];
   const lowercaseName = filename.toLowerCase();

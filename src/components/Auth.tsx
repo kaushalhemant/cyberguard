@@ -6,6 +6,7 @@ import { safeJsonResponse } from '../lib/api';
 
 interface AuthProps {
   onAuthSuccess: (user: User, token: string, googleToken?: string | null) => void;
+  onDemoAccess?: () => void;
 }
 
 const COUNTRY_CODES = [
@@ -28,7 +29,7 @@ const COUNTRY_CODES = [
   { name: 'Nepal', code: '+977', flag: '🇳🇵' },
 ];
 
-export default function Auth({ onAuthSuccess }: AuthProps) {
+export default function Auth({ onAuthSuccess, onDemoAccess }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -293,6 +294,19 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
               </>
             )}
           </button>
+
+          {onDemoAccess && (
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={onDemoAccess}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 hover:border-cyan-400/60 font-mono text-xs py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              >
+                <Key className="w-3.5 h-3.5" />
+                <span>1-Click Quick Demo Access (SOC Official)</span>
+              </button>
+            </div>
+          )}
 
         </form>
       )}

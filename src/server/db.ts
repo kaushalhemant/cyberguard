@@ -360,6 +360,11 @@ class HybridDb {
             riskScore: s.risk_score,
             aiSummary: s.ai_summary,
             breaches: typeof s.breaches === 'string' ? JSON.parse(s.breaches) : (s.breaches || []),
+            scanType: s.scan_type || 'email',
+            targetLink: s.target_link || undefined,
+            targetImage: s.target_image || undefined,
+            imageFileName: s.image_file_name || undefined,
+            detectedThreats: typeof s.detected_threats === 'string' ? JSON.parse(s.detected_threats) : (s.detected_threats || undefined),
           }));
         }
       } catch (err) {
@@ -386,7 +391,7 @@ class HybridDb {
 
     if (isSupabaseConfigured && supabaseServer) {
       try {
-        await supabaseServer.from('scans').insert({
+        const payload: Record<string, any> = {
           id: scan.id || crypto.randomUUID(),
           user_email: cleanedEmail,
           target_email: scan.targetEmail,
@@ -394,8 +399,29 @@ class HybridDb {
           result_count: scan.resultCount,
           risk_score: scan.riskScore,
           ai_summary: scan.aiSummary,
-          breaches: scan.breaches,
-        });
+          breaches: scan.breaches || [],
+          scan_type: scan.scanType || 'email',
+          target_link: scan.targetLink || null,
+          target_image: scan.targetImage || null,
+          image_file_name: scan.imageFileName || null,
+          detected_threats: scan.detectedThreats || [],
+        };
+
+        const { error } = await supabaseServer.from('scans').insert(payload);
+        if (error) {
+          console.warn('[Supabase addScan Warning]: Primary insert notice (retrying base columns if schema unmigrated):', error.message);
+          // Fallback insert without newly added columns in case user's existing Supabase table has old schema
+          await supabaseServer.from('scans').insert({
+            id: payload.id,
+            user_email: payload.user_email,
+            target_email: payload.target_email,
+            timestamp: payload.timestamp,
+            result_count: payload.result_count,
+            risk_score: payload.risk_score,
+            ai_summary: payload.ai_summary,
+            breaches: payload.breaches,
+          });
+        }
 
         // Increment scans_this_month in Supabase
         const user = await this.getUser(cleanedEmail);

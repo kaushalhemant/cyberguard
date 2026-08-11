@@ -28,7 +28,12 @@ CREATE TABLE IF NOT EXISTS public.scans (
   result_count INTEGER DEFAULT 0,
   risk_score INTEGER DEFAULT 0,
   ai_summary TEXT,
-  breaches JSONB DEFAULT '[]'::jsonb
+  breaches JSONB DEFAULT '[]'::jsonb,
+  scan_type TEXT DEFAULT 'email',
+  target_link TEXT,
+  target_image TEXT,
+  image_file_name TEXT,
+  detected_threats JSONB DEFAULT '[]'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_scans_user_email ON public.scans(user_email);

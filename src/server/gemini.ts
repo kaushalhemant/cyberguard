@@ -90,7 +90,7 @@ export async function generateBreachReportSummary(
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         temperature: 0.7,
@@ -201,7 +201,7 @@ export async function generateLinkThreatReport(url: string): Promise<ThreatRepor
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -302,7 +302,7 @@ export async function generateImageThreatReport(
     };
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [
         imagePart,
         { text: prompt }
@@ -351,7 +351,7 @@ export async function performSearchGrounding(query: string): Promise<{ text: str
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: `Perform a secure web search and answer this cybersecurity research query: "${query}". Provide a detailed and analytical report.`,
       config: {
         tools: [{ googleSearch: {} }],
@@ -382,7 +382,7 @@ export async function performSearchGrounding(query: string): Promise<{ text: str
     try {
       console.log("Attempting graceful fallback text generation without search grounding...");
       const fallbackResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.0-flash",
         contents: `Answer this cybersecurity research query: "${query}". Provide a detailed, highly professional, and analytical report based on your security knowledge base.`,
       });
 
@@ -423,14 +423,14 @@ export async function performGeminiIntelligence(
     return "Gemini Intelligence is currently offline. Please set your GEMINI_API_KEY in the .env file.";
   }
 
-  let modelName = "gemini-2.5-flash"; // Default general
+  let modelName = "gemini-2.0-flash"; // Default general
   let systemInstruction = "You are CyberGuard AI, a helpful security assistant.";
 
   if (taskType === 'complex') {
-    modelName = "gemini-2.5-pro";
+    modelName = "gemini-1.5-pro";
     systemInstruction = "You are CyberGuard Security Principal Architect. Solve complex analysis, policy drafting, or firewall rules coding tasks with deep expert attention.";
   } else if (taskType === 'fast') {
-    modelName = "gemini-2.5-flash";
+    modelName = "gemini-2.0-flash";
     systemInstruction = "You are a ultra-fast security advisor. Provide rapid, bulletproof advice on quick checks.";
   }
 
@@ -449,12 +449,12 @@ export async function performGeminiIntelligence(
     console.error(`Gemini Intelligence error on model ${modelName}:`, error);
 
     // If the selected model fails (e.g. 503 unavailable, 404 not found, or 429 rate limits),
-    // and it isn't already the default, attempt to fall back to gemini-2.5-flash
-    if (modelName !== "gemini-2.5-flash") {
+    // and it isn't already the default, attempt to fall back to gemini-2.0-flash
+    if (modelName !== "gemini-2.0-flash") {
       try {
-        console.warn(`Attempting graceful fallback to gemini-2.5-flash due to error on ${modelName}`);
+        console.warn(`Attempting graceful fallback to gemini-2.0-flash due to error on ${modelName}`);
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-2.0-flash",
           contents: message,
           config: {
             systemInstruction: `${systemInstruction} (Note: Running in high-compatibility fallback mode)`,
@@ -490,7 +490,7 @@ export async function performVoiceConversation(message: string): Promise<string>
     // Note: Use gemini-3.5-flash for standard REST generateContent to avoid 404/not supported errors 
     // associated with websocket/live-preview models on standard REST endpoints
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: message,
       config: {
         systemInstruction: "You are CyberGuard's real-time responsive voice security assistant. Answer conversationally, concisely, and with reassuring security clarity, suitable for real-time speech output.",

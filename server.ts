@@ -874,6 +874,17 @@ app.get('/api/admin/logs', verifyMasterAdmin, async (req: Request, res: Response
   res.json({ activityLogs, systemLogs });
 });
 
+// Telemetry & Audit Logs Endpoint for Vercel/Admins
+app.get('/api/logs', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const activityLogs = await db.getActivityLogs(200);
+    const systemLogs = await db.getSystemLogs(200);
+    res.json({ success: true, activityLogs, systemLogs });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch telemetry logs.' });
+  }
+});
+
 app.get('/api/admin/system-stats', verifyMasterAdmin, async (req: Request, res: Response) => {
   const memoryUsage = process.memoryUsage();
   const users = await db.getAllUsers();
