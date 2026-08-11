@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
-    "@supabase/supabase-js": "^2.112.0",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.3",
     "@tailwindcss/vite": "^4.1.14",
     "@types/mailparser": "^3.4.6",
     "@vitejs/plugin-react": "^5.0.4",
