@@ -288,20 +288,47 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
     const domainLabels = hostname.split('.');
     const sld = domainLabels.length >= 2 ? domainLabels[domainLabels.length - 2] : hostname;
 
-    for (const brand of BRAND_TARGETS) {
-      if (sld !== brand) {
-        const distance = levenshteinDistance(sld, brand);
-        if (distance >= 1 && distance <= 2 && Math.abs(sld.length - brand.length) <= 2) {
-          typosquatMatch = { targetBrand: brand, distance };
-          flags.push({
-            id: 'FLAG-TYPOSQUATTING',
-            name: 'Brand Typosquatting Impersonation Detected',
-            severity: 'CRITICAL',
-            weight: 45,
-            description: `Domain label "${sld}" is visually similar to registered brand "${brand}" (Levenshtein distance: ${distance}).`,
-            securityReasoning: 'Typosquatting is a high-confidence indicator of brand spoofing intended for credential harvesting or credential phishing.'
-          });
-          break;
+    const compoundTyposquats = [
+      { pattern: /paypa1|paypaI|pay-pal|paypa1l/i, brand: 'paypal' },
+      { pattern: /g00gle|gogle|goog1e|gooogle/i, brand: 'google' },
+      { pattern: /m1crosoft|micros0ft|micro-soft/i, brand: 'microsoft' },
+      { pattern: /amaz0n|amzn-verify|amazn/i, brand: 'amazon' },
+      { pattern: /netfl1x|netf1ix|netfllx/i, brand: 'netflix' },
+      { pattern: /app1e|appie|apple-verify/i, brand: 'apple' },
+      { pattern: /binance-verify|coinbase-auth/i, brand: 'binance/coinbase' }
+    ];
+
+    for (const item of compoundTyposquats) {
+      if (item.pattern.test(hostname)) {
+        typosquatMatch = { targetBrand: item.brand, distance: 1 };
+        flags.push({
+          id: 'FLAG-TYPOSQUATTING',
+          name: 'Brand Typosquatting Impersonation Detected',
+          severity: 'CRITICAL',
+          weight: 45,
+          description: `Domain "${hostname}" contains brand impersonation pattern mimicking "${item.brand}".`,
+          securityReasoning: 'Typosquatting is a high-confidence indicator of brand spoofing intended for credential harvesting or credential phishing.'
+        });
+        break;
+      }
+    }
+
+    if (!typosquatMatch) {
+      for (const brand of BRAND_TARGETS) {
+        if (sld !== brand) {
+          const distance = levenshteinDistance(sld, brand);
+          if (distance >= 1 && distance <= 2 && Math.abs(sld.length - brand.length) <= 2) {
+            typosquatMatch = { targetBrand: brand, distance };
+            flags.push({
+              id: 'FLAG-TYPOSQUATTING',
+              name: 'Brand Typosquatting Impersonation Detected',
+              severity: 'CRITICAL',
+              weight: 45,
+              description: `Domain label "${sld}" is visually similar to registered brand "${brand}" (Levenshtein distance: ${distance}).`,
+              securityReasoning: 'Typosquatting is a high-confidence indicator of brand spoofing intended for credential harvesting or credential phishing.'
+            });
+            break;
+          }
         }
       }
     }

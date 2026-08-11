@@ -2,9 +2,6 @@ import React, { useState } from 'react';
 import { Shield, ShieldCheck, Mail, Lock, AlertCircle, RefreshCw, User as UserIcon, Phone, ArrowLeft, Key } from 'lucide-react';
 import { User } from '../types';
 import PrivacyStatementModal from './PrivacyStatementModal';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { auth, googleProvider, db as firestoreDb } from '../lib/firebase';
 import { safeJsonResponse } from '../lib/api';
 
 interface AuthProps {
@@ -33,7 +30,6 @@ const COUNTRY_CODES = [
 
 export default function Auth({ onAuthSuccess }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
-  const [authMode, setAuthMode] = useState<'firebase' | 'local'>('local');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
@@ -138,130 +134,33 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     setLoading(true);
 
     try {
-      if (authMode === 'local') {
-        // Direct local backend registration (bypass Firebase)
-        const response = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-            fullName: fullName.trim(),
-            mobileNumber: `${countryCode} ${mobileNumber.trim()}`,
-            otpDeliveryPref: otpPref,
-            otpCode: enteredOtp,
-          }),
-        });
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          fullName: fullName.trim(),
+          mobileNumber: `${countryCode} ${mobileNumber.trim()}`,
+          otpDeliveryPref: otpPref,
+          otpCode: enteredOtp,
+        }),
+      });
 
-        const data = await safeJsonResponse(response, 'Account creation failed.');
+      const data = await safeJsonResponse(response, 'Account creation failed.');
 
-        if (!response.ok) {
-          throw new Error(data.error || 'Something went wrong during account creation.');
-        }
-
-        // Store in storage
-        localStorage.setItem('cyberguard_token', data.token);
-        onAuthSuccess(data.user, data.token);
-      } else {
-        try {
-          // 1. Create the user in Firebase Auth
-          const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-          const firebaseUser = userCredential.user;
-
-          // 2. Synchronize with our server database to get JWT and role
-          const response = await fetch('/api/auth/firebase-sync', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              email: firebaseUser.email,
-              fullName: fullName.trim(),
-              mobileNumber: `${countryCode} ${mobileNumber.trim()}`,
-              otpDeliveryPref: otpPref,
-              firebaseUid: firebaseUser.uid,
-            }),
-          });
-
-          const data = await safeJsonResponse(response, 'Session synchronization failed.');
-
-          if (!response.ok) {
-            throw new Error(data.error || 'Something went wrong during session synchronization.');
-          }
-
-          // 3. Keep track of user data with Firestore persistence
-          try {
-            const userDocRef = doc(firestoreDb, 'users', firebaseUser.uid);
-            await setDoc(userDocRef, {
-              id: firebaseUser.uid,
-              email: firebaseUser.email,
-              fullName: fullName.trim(),
-              mobileNumber: `${countryCode} ${mobileNumber.trim()}`,
-              otpDeliveryPref: otpPref,
-              role: data.user.role || 'user',
-              plan: data.user.plan || 'free',
-              scansThisMonth: data.user.scansThisMonth || 0,
-              createdAt: new Date().toISOString()
-            }, { merge: true });
-          } catch (fsErr) {
-            console.warn('Firestore write warning:', fsErr);
-          }
-
-          // Store in storage
-          localStorage.setItem('cyberguard_token', data.token);
-          onAuthSuccess(data.user, data.token);
-        } catch (fbErr: any) {
-          if (fbErr.code === 'auth/operation-not-allowed' || fbErr.code === 'auth/configuration-not-found' || (fbErr.message && fbErr.message.includes('operation-not-allowed'))) {
-            console.warn('Firebase Email/Password not enabled in console. Auto-falling back to Local Server Auth registration...');
-            const response = await fetch('/api/auth/register', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                email: email.trim(),
-                password,
-                fullName: fullName.trim(),
-                mobileNumber: `${countryCode} ${mobileNumber.trim()}`,
-                otpDeliveryPref: otpPref,
-                otpCode: enteredOtp,
-              }),
-            });
-
-            const data = await safeJsonResponse(response, 'Account creation failed.');
-
-            if (!response.ok) {
-              throw new Error(data.error || 'Something went wrong during account creation.');
-            }
-
-            localStorage.setItem('cyberguard_token', data.token);
-            onAuthSuccess(data.user, data.token);
-            return;
-          }
-          throw fbErr;
-        }
+      if (!response.ok) {
+        throw new Error(data.error || 'Something went wrong during account creation.');
       }
+
+      // Store in storage
+      localStorage.setItem('cyberguard_token', data.token);
+      onAuthSuccess(data.user, data.token);
     } catch (err: any) {
-      if (authMode === 'local') {
-        console.error('Local Auth registration error:', err);
-      } else {
-        console.error('Firebase Auth registration error:', err);
-      }
-      let errMsg = 'Error occurred during secure account setup.';
-      if (err.code === 'auth/email-already-in-use') {
-        errMsg = "This email address is already registered under a CyberGuard account. Please switch to the 'Sign In' tab above to access your profile.";
-      } else if (err.code === 'auth/operation-not-allowed') {
-        errMsg = "This authentication provider is not yet enabled in Firebase Console. Click 'Local Server Auth' tab above to proceed smoothly!";
-      } else if (err.code === 'auth/weak-password') {
-        errMsg = "The password is too weak. Please ensure your security password has at least 6 characters.";
-      } else if (err.code === 'auth/invalid-email') {
-        errMsg = "The email address format is invalid. Please double check and enter a correct email address.";
-      } else if (err.message) {
-        errMsg = err.message;
-      }
-      setError(errMsg);
+      console.error('Registration error:', err);
+      setError(err.message || 'Error occurred during secure account setup.');
     } finally {
       setLoading(false);
     }
@@ -279,116 +178,30 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     setLoading(true);
 
     try {
-      if (authMode === 'local') {
-        // Direct local backend login (bypass Firebase)
-        const response = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email: email.trim(), password }),
-        });
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
 
-        const data = await safeJsonResponse(response, 'Authentication failed.');
+      const data = await safeJsonResponse(response, 'Authentication failed.');
 
-        if (!response.ok) {
-          throw new Error(data.error || 'Something went wrong during authentication.');
-        }
-
-        // Store in storage
-        localStorage.setItem('cyberguard_token', data.token);
-        onAuthSuccess(data.user, data.token);
-      } else {
-        try {
-          // 1. Authenticate with Firebase Auth
-          const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
-          const firebaseUser = userCredential.user;
-
-          // 2. Sync with server database to get JWT
-          const response = await fetch('/api/auth/firebase-sync', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              email: firebaseUser.email,
-              firebaseUid: firebaseUser.uid,
-            }),
-          });
-
-          const data = await safeJsonResponse(response, 'Session synchronization failed.');
-
-          if (!response.ok) {
-            throw new Error(data.error || 'Something went wrong during session synchronization.');
-          }
-
-          // 3. Keep track of user data with Firestore persistence
-          try {
-            const userDocRef = doc(firestoreDb, 'users', firebaseUser.uid);
-            await setDoc(userDocRef, {
-              id: firebaseUser.uid,
-              email: firebaseUser.email,
-              fullName: data.user.fullName || '',
-              mobileNumber: data.user.mobileNumber || '',
-              role: data.user.role || 'user',
-              plan: data.user.plan || 'free',
-              scansThisMonth: data.user.scansThisMonth || 0,
-              createdAt: data.user.createdAt || new Date().toISOString()
-            }, { merge: true });
-          } catch (fsErr) {
-            console.warn('Firestore write warning:', fsErr);
-          }
-
-          // Store in storage
-          localStorage.setItem('cyberguard_token', data.token);
-          onAuthSuccess(data.user, data.token);
-        } catch (fbErr: any) {
-          if (fbErr.code === 'auth/operation-not-allowed' || fbErr.code === 'auth/configuration-not-found' || (fbErr.message && fbErr.message.includes('operation-not-allowed'))) {
-            console.warn('Firebase Email/Password not enabled in console. Auto-falling back to Local Server Auth login...');
-            const response = await fetch('/api/auth/login', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ email: email.trim(), password }),
-            });
-
-            const data = await safeJsonResponse(response, 'Authentication failed.');
-
-            if (!response.ok) {
-              throw new Error(data.error || 'Something went wrong during authentication.');
-            }
-
-            localStorage.setItem('cyberguard_token', data.token);
-            onAuthSuccess(data.user, data.token);
-            return;
-          }
-          throw fbErr;
-        }
+      if (!response.ok) {
+        throw new Error(data.error || 'Something went wrong during authentication.');
       }
+
+      // Store in storage
+      localStorage.setItem('cyberguard_token', data.token);
+      onAuthSuccess(data.user, data.token);
     } catch (err: any) {
-      if (authMode === 'local') {
-        console.error('Local Auth login error:', err);
-      } else {
-        console.error('Firebase Auth login error:', err);
-      }
-      let errMsg = 'Authentication failed. Please verify your credentials.';
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/user-disabled') {
-        errMsg = "Invalid email address or security key password. Please double check your credentials and try again.";
-      } else if (err.code === 'auth/operation-not-allowed') {
-        errMsg = "Email/Password sign-in is not enabled. Click 'Local Server Auth' tab above to proceed smoothly!";
-      } else if (err.code === 'auth/invalid-email') {
-        errMsg = "The email address format is invalid. Please enter a correct email address.";
-      } else if (err.message) {
-        errMsg = err.message;
-      }
-      setError(errMsg);
+      console.error('Login error:', err);
+      setError(err.message || 'Authentication failed. Please verify your credentials.');
     } finally {
       setLoading(false);
     }
   };
-
-
 
   return (
     <div className="max-w-md w-full mx-auto bento-card p-8 relative overflow-hidden transition-all duration-300">
@@ -417,51 +230,12 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         </p>
       </div>
 
-      {/* Auth Mode Selector */}
-      {!otpStep && (
-        <div className="flex bg-slate-950 border border-slate-800 p-1 rounded-xl mb-6 relative z-10 font-mono text-[10px] font-bold">
-          <button
-            type="button"
-            onClick={() => { setAuthMode('firebase'); setError(null); }}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg transition-all cursor-pointer ${
-              authMode === 'firebase'
-                ? 'bg-cyan-500 text-slate-950 shadow-md font-extrabold'
-                : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>FIREBASE CLOUD AUTH</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => { setAuthMode('local'); setError(null); }}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg transition-all cursor-pointer ${
-              authMode === 'local'
-                ? 'bg-cyan-500 text-slate-950 shadow-md font-extrabold'
-                : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>LOCAL SERVER AUTH</span>
-          </button>
-        </div>
-      )}
-
       {error && (
         <div className="p-3.5 mb-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex flex-col gap-2 text-rose-300 text-xs relative z-10">
           <div className="flex items-start gap-2.5">
             <AlertCircle className="w-4.5 h-4.5 shrink-0 mt-0.5 text-rose-400" />
             <span className="leading-relaxed">{error}</span>
           </div>
-          {authMode === 'firebase' && (error.includes('not enabled') || error.includes('not yet enabled') || error.includes('provider') || error.includes('Auth registration error') || error.includes('Firebase')) && (
-            <button
-              type="button"
-              onClick={() => { setAuthMode('local'); setError(null); }}
-              className="mt-1 text-cyan-400 hover:text-cyan-300 font-bold underline text-[11px] self-start cursor-pointer transition-all flex items-center gap-1"
-            >
-              👉 Click here to bypass and use Local Server Auth (fully functional!)
-            </button>
-          )}
         </div>
       )}
 

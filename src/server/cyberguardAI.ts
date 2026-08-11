@@ -1,4 +1,5 @@
 import { Breach, ThreatIntelligenceReport } from "../types";
+import * as GeminiModule from "./gemini";
 
 export interface ThreatReport {
   riskScore: number;
@@ -109,6 +110,13 @@ export async function generateBreachReportSummary(
   breaches: Breach[],
   riskScore: number
 ): Promise<string> {
+  try {
+    const liveAiRes = await GeminiModule.generateBreachReportSummary(targetEmail, breaches, riskScore);
+    if (liveAiRes && !liveAiRes.includes('AI Generation Offline') && !liveAiRes.includes('Offline Threat Assessment')) {
+      return liveAiRes;
+    }
+  } catch (e) {}
+
   const breachCount = breaches.length;
   const highRiskBreaches = breaches.filter(b => b.severity === 'critical' || b.severity === 'high');
   const allDataClasses = Array.from(new Set(breaches.flatMap(b => b.DataClasses)));
@@ -327,6 +335,13 @@ export async function performGeminiIntelligence(
   message: string,
   taskType: 'complex' | 'general' | 'fast'
 ): Promise<string> {
+  try {
+    const liveAiRes = await GeminiModule.performGeminiIntelligence(message, taskType);
+    if (liveAiRes && !liveAiRes.includes('currently offline') && !liveAiRes.includes('Offline Mode') && !liveAiRes.includes('Error:')) {
+      return liveAiRes;
+    }
+  } catch (e) {}
+
   const lowerMsg = message.toLowerCase().trim();
 
   // Match custom security queries

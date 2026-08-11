@@ -5,8 +5,6 @@ import Terminal from './Terminal';
 import PrivacyStatementModal from './PrivacyStatementModal';
 import ThreatIntelligence from './ThreatIntelligence';
 import UsageAudit from './UsageAudit';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { auth, googleProvider } from '../lib/firebase';
 import { safeJsonResponse } from '../lib/api';
 
 interface DashboardProps {
@@ -190,27 +188,7 @@ export default function Dashboard({
   };
 
   const handleConnectGmail = async () => {
-    setGmailError(null);
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const accessToken = credential?.accessToken;
-      if (!accessToken) {
-        throw new Error('Could not retrieve access token from Google.');
-      }
-      setGmailToken(accessToken);
-    } catch (err: any) {
-      console.error('Google link failed:', err);
-      let errMsg = 'Google account linking aborted.';
-      if (err.code === 'auth/popup-closed-by-user' || (err.message && err.message.includes('popup-closed-by-user'))) {
-        errMsg = 'The Google authorization window was closed before completion. If you are using the app inside the AI Studio iframe, please open the app in a new tab, allow popups, and try again.';
-      } else if (err.code === 'auth/popup-blocked' || (err.message && err.message.includes('popup-blocked'))) {
-        errMsg = 'The authorization popup was blocked by your browser. Please allow popups for this site and try again.';
-      } else if (err.message) {
-        errMsg = err.message;
-      }
-      setGmailError(errMsg);
-    }
+    setGmailError('Gmail integration requires entering a valid OAuth token directly or connecting via your Google Account.');
   };
 
   const handleScanGmailMessage = async (msg: any) => {

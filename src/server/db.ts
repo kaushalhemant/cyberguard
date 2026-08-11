@@ -14,89 +14,99 @@ interface DbSchema {
   systemLogs?: SystemLog[];
 }
 
-// Initial default state with seeded data for local fallback
-const initialDb: DbSchema = {
-  users: {
-    'admin@cyberguard.com': {
-      id: 'admin-id',
-      email: 'admin@cyberguard.com',
-      passwordHash: hashPassword('admin123'),
-      role: 'admin',
-      plan: 'pro',
-      scansThisMonth: 0,
-      createdAt: new Date().toISOString(),
-    },
-    'user@cyberguard.com': {
-      id: 'demo-user-id',
-      email: 'user@cyberguard.com',
-      passwordHash: hashPassword('password123'),
-      role: 'user',
-      plan: 'pro',
-      scansThisMonth: 1,
-      createdAt: new Date().toISOString(),
-    }
-  },
-  scans: {
-    'user@cyberguard.com': [
-      {
-        id: 'scan-1',
-        targetEmail: 'user@cyberguard.com',
-        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        resultCount: 2,
-        riskScore: 68,
-        aiSummary: "Your email user@cyberguard.com was leaked in the Canva and Adobe breaches. Canva leaked passwords and visual assets, whereas Adobe leaked passwords and hints. Immediate password rotation is highly advised.",
-        breaches: [
-          {
-            id: 'canva-breach',
-            targetEmail: 'user@cyberguard.com',
-            Title: 'Canva',
-            Domain: 'canva.com',
-            BreachDate: '2019-05-24',
-            AddedDate: '2019-05-24T00:00:00Z',
-            Description: 'In May 2019, the graphic design tool website Canva suffered a data breach. The attack led to the exposure of data belonging to 137 million users, including email addresses, usernames, real names, and password hashes.',
-            DataClasses: ['Email addresses', 'Passwords', 'Names', 'Usernames'],
-            IsVerified: true,
-            LogoPath: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=128&auto=format&fit=crop&q=60',
-            severity: 'high'
-          },
-          {
-            id: 'adobe-breach',
-            targetEmail: 'user@cyberguard.com',
-            Title: 'Adobe',
-            Domain: 'adobe.com',
-            BreachDate: '2013-10-04',
-            AddedDate: '2013-10-04T00:00:00Z',
-            Description: 'In October 2013, Adobe suffered a massive data breach that exposed customer names, encrypted credit card numbers, and password hints for 38 million active users.',
-            DataClasses: ['Email addresses', 'Passwords', 'Password hints', 'Names'],
-            IsVerified: true,
-            LogoPath: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&auto=format&fit=crop&q=60',
-            severity: 'medium'
-          }
-        ]
-      }
-    ]
-  },
-  payments: [
-    {
-      id: 'pay-demo-1',
-      email: 'user@cyberguard.com',
-      utr: 'UTR982741938',
-      status: 'approved',
-      submittedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-      approvedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 300000).toISOString(),
-    }
-  ]
-};
-
 // Helper for quick SHA256 password hashing
 export function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
+const isProduction = process.env.NODE_ENV === 'production';
+const isProdOrSupabase = isSupabaseConfigured || isProduction;
+
+// Initial default state with seeded data for local fallback
+const initialDb: DbSchema = isProdOrSupabase
+  ? { users: {}, scans: {}, payments: [], activityLogs: [], systemLogs: [] }
+  : {
+      users: {
+        'admin@cyberguard.com': {
+          id: 'admin-id',
+          email: 'admin@cyberguard.com',
+          passwordHash: hashPassword('admin123'),
+          role: 'admin',
+          plan: 'pro',
+          scansThisMonth: 0,
+          createdAt: new Date().toISOString(),
+        },
+        'user@cyberguard.com': {
+          id: 'demo-user-id',
+          email: 'user@cyberguard.com',
+          passwordHash: hashPassword('password123'),
+          role: 'user',
+          plan: 'pro',
+          scansThisMonth: 1,
+          createdAt: new Date().toISOString(),
+        }
+      },
+      scans: {
+        'user@cyberguard.com': [
+          {
+            id: 'scan-1',
+            targetEmail: 'user@cyberguard.com',
+            timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+            resultCount: 2,
+            riskScore: 68,
+            aiSummary: "Your email user@cyberguard.com was leaked in the Canva and Adobe breaches. Canva leaked passwords and visual assets, whereas Adobe leaked passwords and hints. Immediate password rotation is highly advised.",
+            breaches: [
+              {
+                id: 'canva-breach',
+                targetEmail: 'user@cyberguard.com',
+                Title: 'Canva',
+                Domain: 'canva.com',
+                BreachDate: '2019-05-24',
+                AddedDate: '2019-05-24T00:00:00Z',
+                Description: 'In May 2019, the graphic design tool website Canva suffered a data breach. The attack led to the exposure of data belonging to 137 million users, including email addresses, usernames, real names, and password hashes.',
+                DataClasses: ['Email addresses', 'Passwords', 'Names', 'Usernames'],
+                IsVerified: true,
+                LogoPath: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=128&auto=format&fit=crop&q=60',
+                severity: 'high'
+              },
+              {
+                id: 'adobe-breach',
+                targetEmail: 'user@cyberguard.com',
+                Title: 'Adobe',
+                Domain: 'adobe.com',
+                BreachDate: '2013-10-04',
+                AddedDate: '2013-10-04T00:00:00Z',
+                Description: 'In October 2013, Adobe suffered a massive data breach that exposed customer names, encrypted credit card numbers, and password hints for 38 million active users.',
+                DataClasses: ['Email addresses', 'Passwords', 'Password hints', 'Names'],
+                IsVerified: true,
+                LogoPath: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&auto=format&fit=crop&q=60',
+                severity: 'medium'
+              }
+            ]
+          }
+        ]
+      },
+      payments: [
+        {
+          id: 'pay-demo-1',
+          email: 'user@cyberguard.com',
+          utr: 'UTR982741938',
+          status: 'approved',
+          submittedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+          approvedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 300000).toISOString(),
+        }
+      ]
+    };
+
 // AES-256-CBC database encryption at rest to protect personal details in local JSON storage
 const ENCRYPTION_ALGORITHM = 'aes-256-cbc';
-const ENCRYPTION_SECRET = process.env.DB_ENCRYPTION_SECRET || 'cyberguard-soc-default-super-secret-key-32bytes!';
-const ENCRYPTION_KEY = crypto.createHash('sha256').update(ENCRYPTION_SECRET).digest();
+const ENCRYPTION_SECRET = process.env.DB_ENCRYPTION_SECRET || (isProduction ? '' : 'cyberguard-soc-default-super-secret-key-32bytes!');
+
+if (isProduction && !process.env.DB_ENCRYPTION_SECRET && !isSupabaseConfigured) {
+  throw new Error('FATAL: DB_ENCRYPTION_SECRET environment variable is required in production when Supabase is not configured.');
+}
+
+const ENCRYPTION_KEY = crypto.createHash('sha256').update(ENCRYPTION_SECRET || 'fallback-secret-for-key-derive').digest();
 
 export function encryptData(text: string): string {
   const iv = crypto.randomBytes(16);
@@ -133,6 +143,9 @@ class HybridDb {
   }
 
   private loadLocal() {
+    if (isSupabaseConfigured) {
+      return;
+    }
     try {
       if (fs.existsSync(DB_FILE)) {
         const fileContent = fs.readFileSync(DB_FILE, 'utf8').trim();
@@ -145,7 +158,7 @@ class HybridDb {
           decryptedContent = decryptData(fileContent);
         }
         this.data = JSON.parse(decryptedContent);
-        if (!this.data.users['admin@cyberguard.com']) {
+        if (!isProdOrSupabase && initialDb.users['admin@cyberguard.com'] && !this.data.users['admin@cyberguard.com']) {
           this.data.users['admin@cyberguard.com'] = initialDb.users['admin@cyberguard.com'];
         }
         if (wasPlain) {
@@ -160,12 +173,15 @@ class HybridDb {
   }
 
   private saveLocal() {
+    if (isSupabaseConfigured) {
+      return;
+    }
     try {
       const jsonString = JSON.stringify(this.data, null, 2);
       const encryptedString = encryptData(jsonString);
       fs.writeFileSync(DB_FILE, encryptedString, 'utf8');
     } catch (err) {
-      console.error('Failed to write local database file:', err);
+      console.error('Failed to write local database file (swallowed for read-only filesystem compatibility):', err);
     }
   }
 

@@ -108,7 +108,12 @@ export async function scanImage(
   const ocrPhishingKeywordsFound: string[] = [];
 
   try {
-    const worker = await createWorker('eng');
+    let worker;
+    try {
+      worker = await createWorker('eng', 1, { cachePath: process.cwd() });
+    } catch {
+      worker = await createWorker('eng');
+    }
     const ret = await worker.recognize(inputBuffer);
     ocrText = ret.data.text || '';
     await worker.terminate();
