@@ -1,5 +1,6 @@
 import { Breach, ThreatIntelligenceReport } from "../types";
 import * as GeminiModule from "./gemini";
+import * as NvidiaModule from "./nvidia";
 
 export interface ThreatReport {
   riskScore: number;
@@ -110,6 +111,15 @@ export async function generateBreachReportSummary(
   breaches: Breach[],
   riskScore: number
 ): Promise<string> {
+  if (NvidiaModule.isNvidiaKeyAvailable()) {
+    try {
+      const nvRes = await NvidiaModule.generateNvidiaBreachReportSummary(targetEmail, breaches, riskScore);
+      if (nvRes) return nvRes;
+    } catch (e) {
+      console.warn("[CyberGuard AI] NVIDIA API attempt notice:", e);
+    }
+  }
+
   try {
     const liveAiRes = await GeminiModule.generateBreachReportSummary(targetEmail, breaches, riskScore);
     if (liveAiRes && !liveAiRes.includes('AI Generation Offline') && !liveAiRes.includes('Offline Threat Assessment')) {
@@ -158,6 +168,15 @@ export async function generateBreachReportSummary(
  * 2. LINK / URL SAFETY AI INSPECTOR
  */
 export async function generateLinkThreatReport(url: string): Promise<ThreatReport> {
+  if (NvidiaModule.isNvidiaKeyAvailable()) {
+    try {
+      const nvReport = await NvidiaModule.generateNvidiaLinkThreatReport(url);
+      if (nvReport && nvReport.aiSummary) return nvReport;
+    } catch (e) {
+      console.warn("[CyberGuard AI] NVIDIA Link Scan notice:", e);
+    }
+  }
+
   try {
     const liveReport = await GeminiModule.generateLinkThreatReport(url);
     if (liveReport && !liveReport.aiSummary.includes('AI Scan Offline Fallback')) {
@@ -349,6 +368,15 @@ export async function performGeminiIntelligence(
   message: string,
   taskType: 'complex' | 'general' | 'fast'
 ): Promise<string> {
+  if (NvidiaModule.isNvidiaKeyAvailable()) {
+    try {
+      const nvAiRes = await NvidiaModule.performNvidiaIntelligence(message, taskType);
+      if (nvAiRes) return nvAiRes;
+    } catch (e) {
+      console.warn("[CyberGuard AI] NVIDIA Intelligence notice:", e);
+    }
+  }
+
   try {
     const liveAiRes = await GeminiModule.performGeminiIntelligence(message, taskType);
     if (liveAiRes && !liveAiRes.includes('currently offline') && !liveAiRes.includes('Offline Mode') && !liveAiRes.includes('Error:')) {
@@ -478,6 +506,15 @@ export async function generateGmailMessageThreatReport(
  * 8. GLOBAL THREAT INTELLIGENCE AI REPORT
  */
 export async function generateThreatIntelligenceReport(): Promise<ThreatIntelligenceReport> {
+  if (NvidiaModule.isNvidiaKeyAvailable()) {
+    try {
+      const nvReport = await NvidiaModule.generateNvidiaThreatIntelligenceReport();
+      if (nvReport && nvReport.alerts && nvReport.alerts.length > 0) return nvReport;
+    } catch (e) {
+      console.warn("[CyberGuard AI] NVIDIA Threat Intel notice:", e);
+    }
+  }
+
   return {
     ...LOCAL_THREAT_INTEL,
     lastUpdated: new Date().toISOString()

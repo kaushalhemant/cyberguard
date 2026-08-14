@@ -11,7 +11,7 @@ function getGeminiClient(): GoogleGenAI | null {
   // Clean potential surrounding quotes or spaces
   apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
   
-  if (apiKey === '' || apiKey === 'MY_GEMINI_API_KEY') {
+  if (apiKey === '' || apiKey === 'MY_GEMINI_API_KEY' || (!apiKey.startsWith('AIza') && apiKey.length < 25)) {
     aiInstance = null;
     lastApiKeyUsed = null;
     return null;
@@ -579,7 +579,7 @@ export async function generateGmailMessageThreatReport(
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -741,7 +741,7 @@ export async function generateThreatIntelligenceReport(): Promise<ThreatIntellig
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
