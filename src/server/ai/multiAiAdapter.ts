@@ -38,7 +38,7 @@ async function tryNvidiaAi(prompt: string, systemInstruction: string, jsonMode: 
 
   try {
     const body: any = {
-      model: 'meta/llama-3.3-70b-instruct',
+      model: 'meta/llama-3.1-70b-instruct',
       messages: [
         { role: 'system', content: systemInstruction },
         { role: 'user', content: prompt }

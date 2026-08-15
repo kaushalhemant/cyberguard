@@ -42,6 +42,14 @@ export interface ScanRiskReport {
         domainAgeDays?: number | null;
         registrar?: string | null;
       } | null;
+      urlhausMatch?: {
+        matched: boolean;
+        queryStatus: string;
+        urlStatus?: string;
+        threat?: string;
+        tags?: string[];
+        urlhausReference?: string;
+      } | null;
     };
     // Email Scanner details
     emailDetails?: {

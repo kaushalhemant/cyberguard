@@ -215,8 +215,59 @@ async function lookupDomainAge(domain: string): Promise<{ domainAgeDays: number 
 }
 
 /**
+ * Query URLhaus Threat Database (abuse.ch) for active malware distribution links.
+ * Security Reasoning: URLhaus tracks real-time malware delivery URLs, payload hashes, and active C2 links.
+ */
+async function checkUrlhausApi(targetUrl: string): Promise<{
+  matched: boolean;
+  queryStatus: string;
+  urlStatus?: string;
+  threat?: string;
+  tags?: string[];
+  urlhausReference?: string;
+} | null> {
+  try {
+    const apiKey = process.env.URLHAUS_API_KEY || '';
+    const formData = new URLSearchParams();
+    formData.append('url', targetUrl);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    };
+    if (apiKey) {
+      headers['Auth-Key'] = apiKey;
+    }
+
+    const response = await fetch('https://urlhaus-api.abuse.ch/v1/url/', {
+      method: 'POST',
+      headers,
+      body: formData.toString(),
+      signal: AbortSignal.timeout(4000)
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.query_status === 'ok') {
+      return {
+        matched: true,
+        queryStatus: data.query_status,
+        urlStatus: data.url_status,
+        threat: data.threat,
+        tags: Array.isArray(data.tags) ? data.tags : [],
+        urlhausReference: data.urlhaus_reference
+      };
+    }
+    return { matched: false, queryStatus: data.query_status };
+  } catch (err) {
+    console.warn('[URLScanner] URLhaus API lookup warning:', err);
+    return null;
+  }
+}
+
+/**
  * MAIN MODULAR URL SCANNER SERVICE
  */
+
 export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
   const timestamp = new Date().toISOString();
   const flags: TriggeredFlag[] = [];
@@ -413,7 +464,22 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
     }
   }
 
+  // 8. LIVE URLHAUS MALWARE THREAT DATABASE LOOKUP
+  // Security Reasoning: Cross-references target URL against live URLhaus threat intelligence database.
+  const urlhausMatch = await checkUrlhausApi(rawUrl);
+  if (urlhausMatch && urlhausMatch.matched) {
+    flags.push({
+      id: 'FLAG-URLHAUS-MALWARE-MATCH',
+      name: 'URLhaus Confirmed Malicious URL Match',
+      severity: 'CRITICAL',
+      weight: 65,
+      description: `Target is listed in the URLhaus malware database (Threat: "${urlhausMatch.threat || 'malware_download'}", Status: ${urlhausMatch.urlStatus || 'active'}${urlhausMatch.tags?.length ? `, Tags: ${urlhausMatch.tags.join(', ')}` : ''}).`,
+      securityReasoning: 'URLhaus is an official cybersecurity threat intelligence repository documenting active malware distribution URLs and payloads.'
+    });
+  }
+
   // CALCULATE CUMULATIVE RISK SCORE & LEVEL
+
   const totalScore = flags.reduce((acc, curr) => acc + curr.weight, 0);
   const riskScore = Math.min(totalScore, 100);
 
@@ -442,7 +508,8 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
         typosquatMatch,
         blocklistMatch,
         tlsInfo,
-        whoisInfo
+        whoisInfo,
+        urlhausMatch
       }
     }
   };

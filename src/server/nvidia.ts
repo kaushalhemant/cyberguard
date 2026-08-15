@@ -11,7 +11,7 @@ export function isNvidiaKeyAvailable(): boolean {
   return getNvidiaApiKey().length > 0;
 }
 
-async function callNvidiaChatCompletions(messages: any[], model: string = 'meta/llama-3.3-70b-instruct', responseFormatJson: boolean = false): Promise<string> {
+async function callNvidiaChatCompletions(messages: any[], model: string = 'meta/llama-3.1-70b-instruct', responseFormatJson: boolean = false): Promise<string> {
   const apiKey = getNvidiaApiKey();
   if (!apiKey) throw new Error("No NVIDIA API key configured");
 
@@ -96,7 +96,7 @@ export async function generateNvidiaLinkThreatReport(url: string): Promise<{ ris
   const text = await callNvidiaChatCompletions([
     { role: "system", content: "You are CyberGuard AI powered by NVIDIA NIM. Respond strictly in valid JSON." },
     { role: "user", content: prompt }
-  ], 'meta/llama-3.3-70b-instruct', true);
+  ], 'meta/llama-3.1-70b-instruct', true);
 
   const parsed = JSON.parse(text || "{}");
   return {
@@ -153,7 +153,7 @@ export async function generateNvidiaThreatIntelligenceReport(): Promise<ThreatIn
   const text = await callNvidiaChatCompletions([
     { role: "system", content: "You are CyberGuard Global Threat Intelligence Powered by NVIDIA AI. Output strictly valid JSON." },
     { role: "user", content: prompt }
-  ], 'meta/llama-3.3-70b-instruct', true);
+  ], 'meta/llama-3.1-70b-instruct', true);
 
   const parsed = JSON.parse(text || "{}");
   return {
