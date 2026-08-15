@@ -3,6 +3,8 @@ import dns from 'dns/promises';
 import fs from 'fs';
 import path from 'path';
 import { ScanRiskReport, TriggeredFlag, RiskLevel } from '../../types/scanners';
+import { checkPhishStats } from './phishstatsScanner';
+
 
 /**
  * BRAND TARGET LIST FOR TYPOSQUATTING DETECTION
@@ -478,6 +480,20 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
     });
   }
 
+  // 9. LIVE PHISHSTATS ZERO-DAY PHISHING LOOKUP
+  // Security Reasoning: Cross-references target URL against live PhishStats zero-day phishing target feed.
+  const phishstatsMatch = await checkPhishStats(rawUrl);
+  if (phishstatsMatch && phishstatsMatch.matched) {
+    flags.push({
+      id: 'FLAG-PHISHSTATS-ZERO-DAY-MATCH',
+      name: 'PhishStats Zero-Day Phishing Target Flagged',
+      severity: 'CRITICAL',
+      weight: 60,
+      description: `Target matched active zero-day phishing campaign (Target: "${phishstatsMatch.target || 'Brand Impersonation'}", Host IP: ${phishstatsMatch.ip || 'N/A'}, Country: ${phishstatsMatch.country || 'N/A'}).`,
+      securityReasoning: 'PhishStats monitors active phishing host deployments and zero-day brand impersonation URLs.'
+    });
+  }
+
   // CALCULATE CUMULATIVE RISK SCORE & LEVEL
 
   const totalScore = flags.reduce((acc, curr) => acc + curr.weight, 0);
@@ -509,8 +525,10 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
         blocklistMatch,
         tlsInfo,
         whoisInfo,
-        urlhausMatch
+        urlhausMatch,
+        phishstatsMatch
       }
     }
   };
 }
+

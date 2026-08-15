@@ -50,6 +50,17 @@ export interface ScanRiskReport {
         tags?: string[];
         urlhausReference?: string;
       } | null;
+      phishstatsMatch?: {
+        matched: boolean;
+        score?: number;
+        target?: string;
+        title?: string;
+        ip?: string;
+        country?: string;
+        host?: string;
+        date?: string;
+        phishstatsUrl?: string;
+      } | null;
     };
     // Email Scanner details
     emailDetails?: {

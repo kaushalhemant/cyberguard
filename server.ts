@@ -17,7 +17,9 @@ function getEnv(key: string, defaultValue: string = ''): string {
 import { db, hashPassword } from './src/server/db';
 import { generateBreachReportSummary, generateLinkThreatReport, generateImageThreatReport, performSearchGrounding, performGeminiIntelligence, generateGmailMessageThreatReport, generateThreatIntelligenceReport } from './src/server/cyberguardAI';
 import { scanUrl, scanEmail, scanImage, scanUnified } from './src/server/scanners/unifiedScanner';
+import { searchCves, getLatestCves } from './src/server/scanners/cveScanner';
 import { User, Breach, ScanResult } from './src/types';
+
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -434,7 +436,34 @@ app.get('/api/ai/threat-intelligence', authenticate, async (req: AuthenticatedRe
   }
 });
 
+// NIST NVD CVE Vulnerability Database Routes
+app.get('/api/cve/search', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const query = String(req.query.query || '');
+    const severity = String(req.query.severity || 'ALL');
+    const limit = parseInt(String(req.query.limit || '20'), 10);
+
+    const result = await searchCves(query, severity, limit);
+    res.json(result);
+  } catch (err: any) {
+    console.error("CVE search route error:", err);
+    res.status(500).json({ error: 'Failed to query CVE vulnerability database' });
+  }
+});
+
+app.get('/api/cve/latest', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const limit = parseInt(String(req.query.limit || '10'), 10);
+    const cves = await getLatestCves(limit);
+    res.json({ cves });
+  } catch (err: any) {
+    console.error("CVE latest route error:", err);
+    res.status(500).json({ error: 'Failed to retrieve latest CVE vulnerabilities' });
+  }
+});
+
 // 2. Scan Endpoints
+
 const STATIC_BREACH_DB: Omit<Breach, 'targetEmail'>[] = [
   {
     id: 'b-canva',
