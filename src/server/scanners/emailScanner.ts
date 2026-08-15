@@ -2,6 +2,8 @@ import dns from 'dns/promises';
 import { simpleParser, ParsedMail } from 'mailparser';
 import { ScanRiskReport, TriggeredFlag, RiskLevel } from '../../types/scanners';
 import { scanUrl } from './urlScanner';
+import { runSublimeAnalysis } from './sublimeScanner';
+
 
 /**
  * DOUBLE EXTENSION SUSPICIOUS PATTERNS
@@ -282,6 +284,23 @@ export async function scanEmail(input: string | Buffer): Promise<ScanRiskReport>
     }
   }
 
+  // 6. SUBLIME SECURITY YML THREAT RULE ANALYSIS
+  // Security Reasoning: Evaluates 1,100+ detection rules (credential theft, BEC, brand impersonation).
+  const sublimeResults = await runSublimeAnalysis(input);
+  if (sublimeResults && sublimeResults.flaggedCount > 0) {
+    for (const rule of sublimeResults.flaggedRules) {
+      const isHigh = rule.severity === 'high' || rule.severity === 'critical';
+      flags.push({
+        id: `FLAG-SUBLIME-${rule.name.replace(/[^a-zA-Z0-9]/g, '-').toUpperCase()}`,
+        name: `Sublime Rule Flagged: ${rule.name}`,
+        severity: isHigh ? 'CRITICAL' : 'HIGH',
+        weight: isHigh ? 50 : 35,
+        description: `Sublime Security detection rule "${rule.name}" triggered on message telemetry (Severity: ${rule.severity.toUpperCase()}).`,
+        securityReasoning: 'Sublime Security MQL detection rules identify sophisticated spear phishing and BEC patterns.'
+      });
+    }
+  }
+
   // CALCULATE CUMULATIVE RISK SCORE & LEVEL
   const totalScore = flags.reduce((acc, curr) => acc + curr.weight, 0);
   const riskScore = Math.min(totalScore, 100);
@@ -309,8 +328,10 @@ export async function scanEmail(input: string | Buffer): Promise<ScanRiskReport>
         senderMismatch,
         suspiciousAttachments,
         extractedLinksCount: extractedLinks.length,
-        nestedUrlReports
+        nestedUrlReports,
+        sublimeResults
       }
     }
   };
 }
+

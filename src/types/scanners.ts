@@ -66,6 +66,15 @@ export interface ScanRiskReport {
       suspiciousAttachments?: { filename: string; extension: string; isDoubleExtension: boolean }[];
       extractedLinksCount?: number;
       nestedUrlReports?: ScanRiskReport[];
+      sublimeResults?: {
+        totalRulesEvaluated: number;
+        flaggedCount: number;
+        flaggedRules: {
+          name: string;
+          severity: string;
+          source?: string;
+        }[];
+      } | null;
     };
     // Image Scanner details
     imageDetails?: {
