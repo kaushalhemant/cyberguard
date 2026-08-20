@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Shield, ShieldAlert, ShieldCheck, Mail, Search, History, LogOut, Terminal as TerminalIcon, Bot, Zap, Brain, Plus, ChevronRight, Lock, Bell, Users, Cpu, FileText, CheckCircle2, UserCheck, RefreshCw, Link2, Image, UploadCloud, Globe, Eye, FileImage, Trash2, Server, Activity, FileCode, AlertTriangle, Download, Database, Key, CheckSquare, Layers } from 'lucide-react';
-import { User, ScanResult, OsintResult, HashAnalysisResult, SocIncident } from '../types';
+import { User, ScanResult, OsintResult, HashAnalysisResult, SocIncident, CveRecord } from '../types';
 import Terminal from './Terminal';
 import PrivacyStatementModal from './PrivacyStatementModal';
 import ThreatIntelligence from './ThreatIntelligence';
@@ -28,9 +28,15 @@ export default function Dashboard({
   onUserUpdate,
   onNavigateAdmin
 }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState<'email' | 'link' | 'image' | 'grounding' | 'intelligence' | 'osint' | 'hash' | 'siem' | 'stix'>('email');
+  const [activeTab, setActiveTab] = useState<'email' | 'link' | 'image' | 'cve' | 'osint' | 'hash' | 'siem' | 'stix'>('email');
   const [scanEmail, setScanEmail] = useState('');
   const [scanUrl, setScanUrl] = useState('');
+
+  // CVE Vulnerability Database States
+  const [cveQuery, setCveQuery] = useState('');
+  const [cveSeverity, setCveSeverity] = useState<string>('ALL');
+  const [cveLoading, setCveLoading] = useState(false);
+  const [cveResults, setCveResults] = useState<{ totalMatches: number; cves: CveRecord[] } | null>(null);
 
   // --- CYBERSECURITY OFFICIAL (SOC) STATES ---
   // OSINT IP & Domain Inspector States
@@ -406,6 +412,24 @@ export default function Dashboard({
       setError(err.message || 'Error generating STIX evidence export.');
     } finally {
       setStixLoading(false);
+    }
+  };
+
+  const handleCveSearch = async (e?: React.FormEvent, customSeverity?: string) => {
+    if (e) e.preventDefault();
+    setCveLoading(true);
+    setError(null);
+    const sevToUse = customSeverity !== undefined ? customSeverity : cveSeverity;
+    try {
+      const response = await fetch(`/api/cve/search?query=${encodeURIComponent(cveQuery)}&severity=${sevToUse}&limit=25`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await safeJsonResponse(response, 'Failed to query NIST CVE vulnerability database.');
+      setCveResults(data);
+    } catch (err: any) {
+      setError(err.message || 'Error querying CVE vulnerability database.');
+    } finally {
+      setCveLoading(false);
     }
   };
 
@@ -860,28 +884,24 @@ export default function Dashboard({
             </button>
             <button
               type="button"
-              onClick={() => { setActiveTab('grounding'); setError(null); setIsQuotaExceeded(false); }}
+              onClick={() => {
+                setActiveTab('cve');
+                setError(null);
+                setIsQuotaExceeded(false);
+                if (!cveResults && !cveLoading) {
+                  handleCveSearch(undefined, 'ALL');
+                }
+              }}
               className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'grounding'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20'
+                activeTab === 'cve'
+                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Globe className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="flex items-center gap-1">SEARCH GROUNDING</span>
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              <span>CVE VULN DATABASE</span>
             </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('intelligence'); setError(null); setIsQuotaExceeded(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'intelligence'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Bot className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="flex items-center gap-1">CYBERGUARD ASSISTANT</span>
-            </button>
+
             <button
               type="button"
               onClick={() => { setActiveTab('osint'); setError(null); setIsQuotaExceeded(false); }}
@@ -946,34 +966,6 @@ export default function Dashboard({
 
           {activeTab === 'email' && (
             <div className="space-y-6 animate-fade-in">
-              {/* Sub-mode selector */}
-              <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-900 w-full sm:w-fit font-mono text-[10px] font-bold">
-                <button
-                  type="button"
-                  onClick={() => setGmailMode('breach')}
-                  className={`flex-1 sm:flex-none px-4 py-2 rounded-md transition-all cursor-pointer ${
-                    gmailMode === 'breach'
-                      ? 'bg-slate-900 text-cyan-400 shadow border border-cyan-500/10'
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  DATABASE BREACH LOOKUP
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGmailMode('gmail')}
-                  className={`flex-1 sm:flex-none px-4 py-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    gmailMode === 'gmail'
-                      ? 'bg-slate-900 text-cyan-400 shadow border border-cyan-500/10'
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                  GMAIL REAL-TIME AUDIT
-                </button>
-              </div>
-
-              {gmailMode === 'breach' ? (
                 <form onSubmit={handleScanSubmit} className="space-y-4">
                   <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">
@@ -1009,149 +1001,6 @@ export default function Dashboard({
                     </button>
                   </div>
                 </form>
-              ) : (
-                <div className="space-y-4">
-                  {gmailError && (
-                    <div className="p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl text-rose-300 text-xs">
-                      {gmailError}
-                    </div>
-                  )}
-
-                  {!gmailToken ? (
-                    <div className="bg-slate-950/60 border border-slate-900 rounded-2xl p-6 md:p-8 text-center space-y-4 max-w-2xl mx-auto">
-                      <div className="w-12 h-12 rounded-full bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-center mx-auto text-cyan-400">
-                        <Mail className="w-6 h-6 animate-pulse" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <h4 className="text-base font-bold font-display text-white">Integrate Your Gmail Inbox</h4>
-                        <p className="text-xs text-slate-400 leading-relaxed max-w-md mx-auto">
-                          Authorize CyberGuard to scan the latest incoming emails directly from your Google primary category inbox. Outsmart active credential harvesters, targeted spear-phishing, or malicious files through Gemini's direct server-side heuristics.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleConnectGmail}
-                        className="mx-auto bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-slate-200 transition-all shadow-lg flex items-center gap-2 cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                          <path
-                            fill="#EA4335"
-                            d="M20.6 10.3c0-.7-.1-1.3-.2-2H12v3.9h4.8c-.2 1.1-.8 2-1.8 2.6v2.1h2.9c1.7-1.6 2.7-3.9 2.7-6.6z"
-                          />
-                          <path
-                            fill="#4285F4"
-                            d="M12 21c2.4 0 4.5-.8 6-2.2l-2.9-2.1c-.8.5-1.9.8-3.1.8-2.4 0-4.4-1.6-5.1-3.8H3.8v2.2C5.3 18.9 8.4 21 12 21z"
-                          />
-                          <path
-                            fill="#FBBC05"
-                            d="M6.9 13.7c-.2-.5-.3-1.1-.3-1.7s.1-1.2.3-1.7V8.1H3.8C3.1 9.5 2.7 11.2 2.7 13s.4 3.5 1.1 4.9l3.1-2.2z"
-                          />
-                          <path
-                            fill="#34A853"
-                            d="M12 5.1c1.3 0 2.5.5 3.4 1.3l2.6-2.6C16.5 2.5 14.4 1.7 12 1.7 8.4 1.7 5.3 3.8 3.8 6.7l3.1 2.2c.7-2.2 2.7-3.8 5.1-3.8z"
-                          />
-                        </svg>
-                        <span>Connect Gmail via Google Auth</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {/* Connection header */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 p-4 rounded-xl border border-slate-900">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-950/40 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
-                            <CheckCircle2 className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <span className="text-xs font-semibold text-white block font-mono">GMAIL INTEGRATION LINKED</span>
-                            <span className="text-[10px] text-slate-500 font-mono">Live Session Status: Active</span>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={gmailLoading}
-                            onClick={() => fetchGmailEmails(gmailToken)}
-                            className="bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold font-mono text-[10px] py-2 px-4 rounded-lg border border-slate-800 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                          >
-                            <RefreshCw className={`w-3 h-3 ${gmailLoading ? 'animate-spin' : ''}`} />
-                            <span>REFRESH</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setGmailToken(null);
-                              setGmailMessages([]);
-                            }}
-                            className="bg-rose-950/30 hover:bg-rose-950/60 text-rose-300 font-bold font-mono text-[10px] py-2 px-4 rounded-lg border border-rose-500/20 transition-all cursor-pointer"
-                          >
-                            DISCONNECT
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Message list container */}
-                      {gmailLoading ? (
-                        <div className="py-12 text-center space-y-3">
-                          <RefreshCw className="w-7 h-7 text-cyan-400 animate-spin mx-auto" />
-                          <p className="text-xs text-slate-500 font-mono">Querying real-time inbox messages via Google Workspace API...</p>
-                        </div>
-                      ) : gmailMessages.length === 0 ? (
-                        <div className="py-12 text-center bg-slate-950/30 border border-slate-900 rounded-2xl">
-                          <Mail className="w-6 h-6 text-slate-600 mx-auto mb-2" />
-                          <p className="text-xs text-slate-500 font-mono">Your primary inbox is empty, or no new messages were returned.</p>
-                        </div>
-                      ) : (
-                        <div className="grid gap-3">
-                          {gmailMessages.map((msg) => {
-                            const isScanning = activeScanningId === msg.id;
-                            return (
-                              <div
-                                key={msg.id}
-                                className="bg-slate-950/40 hover:bg-slate-950 border border-slate-900 rounded-xl p-4 transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:border-slate-800/80"
-                              >
-                                <div className="space-y-1.5 flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[10px]">
-                                    <span className="text-cyan-400 font-bold truncate max-w-[200px]">
-                                      {msg.from}
-                                    </span>
-                                    <span className="text-slate-600">|</span>
-                                    <span className="text-slate-500">{msg.date}</span>
-                                  </div>
-                                  <h5 className="text-xs font-bold text-white truncate max-w-xl">
-                                    {msg.subject || '(No Subject)'}
-                                  </h5>
-                                  <p className="text-[11px] text-slate-400 leading-normal line-clamp-2">
-                                    {msg.snippet}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  disabled={activeScanningId !== null}
-                                  onClick={() => handleScanGmailMessage(msg)}
-                                  className="w-full md:w-auto bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-slate-950 font-bold font-mono text-[10px] py-2 px-4 rounded-lg border border-cyan-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 whitespace-nowrap"
-                                >
-                                  {isScanning ? (
-                                    <>
-                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                      <span>RUNNING NEURAL ASSESS...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Bot className="w-3.5 h-3.5" />
-                                      <span>AI THREAT SCAN</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
@@ -1267,151 +1116,141 @@ export default function Dashboard({
             </form>
           )}
 
-          {/* 4. GOOGLE SEARCH GROUNDING TAB */}
-          {activeTab === 'grounding' && (
-            <div className="space-y-4 animate-fade-in">
-              <form onSubmit={handleGroundingSubmit} className="space-y-3">
+          {activeTab === 'cve' && (
+            <div className="space-y-5 animate-fade-in">
+              <form onSubmit={(e) => handleCveSearch(e)} className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-3">
                   <div className="relative flex-1">
                     <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                      <Globe className="w-5 h-5 text-cyan-400" />
+                      <ShieldAlert className="w-5 h-5 text-amber-400" />
                     </span>
                     <input
                       type="text"
-                      value={groundingQuery}
-                      onChange={(e) => setGroundingQuery(e.target.value)}
-                      placeholder="Ask any cybersecurity query grounded in live Google Search results..."
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-all font-sans"
-                      disabled={groundingLoading}
-                      required
+                      value={cveQuery}
+                      onChange={(e) => setCveQuery(e.target.value)}
+                      placeholder="Search CVE ID or keyword (e.g. CVE-2024, Log4j, OpenSSL, Apache, Remote Code Execution)..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-all font-mono"
+                      disabled={cveLoading}
                     />
                   </div>
                   <button
                     type="submit"
-                    disabled={groundingLoading}
-                    className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0"
+                    disabled={cveLoading}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-amber-400/20 transition-all shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0 font-mono"
                   >
-                    {groundingLoading ? (
+                    {cveLoading ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Querying Web Intelligence...</span>
+                        <span>Searching NIST NVD...</span>
                       </>
                     ) : (
                       <>
                         <Search className="w-4 h-4" />
-                        <span>Search Web Intel</span>
+                        <span>SEARCH CVE DATABASE</span>
                       </>
                     )}
                   </button>
                 </div>
+
+                {/* Severity Quick Filters */}
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/40 p-2.5 rounded-xl border border-slate-900 font-mono text-[10px]">
+                  <span className="text-slate-400 font-bold">Severity Filter:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((sev) => (
+                      <button
+                        key={sev}
+                        type="button"
+                        onClick={() => {
+                          setCveSeverity(sev);
+                          handleCveSearch(undefined, sev);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg border font-bold uppercase cursor-pointer transition-all ${
+                          cveSeverity === sev
+                            ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {sev}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </form>
 
-              {groundingResult && (
-                <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-5 space-y-4 animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 font-mono">Grounded Intel Report</h3>
-                    <span className="text-[10px] text-slate-500 font-mono">Powered by CyberGuard Native Search Engine</span>
+              {/* CVE Results Grid */}
+              {cveLoading ? (
+                <div className="py-16 text-center space-y-3 bg-slate-950/30 border border-slate-900 rounded-2xl">
+                  <RefreshCw className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
+                  <p className="text-xs text-slate-400 font-mono">Indexing and querying 66MB+ NIST NVD CVE vulnerability records...</p>
+                </div>
+              ) : cveResults && cveResults.cves.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between text-xs font-mono text-slate-400 px-1">
+                    <span>Matches Found: <strong className="text-amber-400">{cveResults.totalMatches}</strong> CVE records</span>
+                    <span className="text-[10px] text-slate-500">Source: Official NIST NVD 2.0 Repository</span>
                   </div>
-                  <div className="text-sm text-slate-300 leading-relaxed font-sans whitespace-pre-wrap">
-                    {groundingResult.text}
-                  </div>
-                  {groundingResult.sources && groundingResult.sources.length > 0 && (
-                    <div className="pt-3 border-t border-slate-800/60 space-y-2">
-                      <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">Verified Web Citations:</span>
-                      <div className="flex flex-wrap gap-2">
-                        {groundingResult.sources.map((src, idx) => (
-                          <a
-                            key={`${idx}-${src.url}`}
-                            href={src.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-cyan-400 hover:text-cyan-300 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all"
-                          >
-                            <span>🔗 {src.title || "Web Source"}</span>
-                          </a>
-                        ))}
+
+                  <div className="grid gap-3">
+                    {cveResults.cves.map((cve) => (
+                      <div
+                        key={cve.id}
+                        className="bg-slate-950/60 border border-slate-850 hover:border-slate-800 rounded-2xl p-4 md:p-5 space-y-3 transition-all"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-900 pb-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold font-mono text-cyan-400 select-all">{cve.id}</span>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider border ${
+                              cve.severity === 'CRITICAL'
+                                ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+                                : cve.severity === 'HIGH'
+                                ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                                : cve.severity === 'MEDIUM'
+                                ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
+                                : 'bg-slate-500/15 border-slate-500/30 text-slate-400'
+                            }`}>
+                              {cve.severity} SEVERITY
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-500">Source: {cve.sourceIdentifier}</span>
+                          </div>
+                          {cve.score > 0 && (
+                            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
+                              <span className="text-[10px] font-mono text-slate-400">CVSS v3.1:</span>
+                              <span className={`text-xs font-bold font-mono ${cve.score >= 9 ? 'text-rose-400' : cve.score >= 7 ? 'text-amber-400' : 'text-cyan-400'}`}>
+                                {cve.score.toFixed(1)} / 10.0
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-slate-300 leading-relaxed font-sans">{cve.description}</p>
+
+                        {cve.vectorString && (
+                          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-950 text-[10px] font-mono text-slate-400 truncate select-all">
+                            <span className="text-slate-500 font-semibold mr-1">VECTOR:</span>
+                            {cve.vectorString}
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 pt-1">
+                          <span>Published: {cve.published ? new Date(cve.published).toLocaleDateString() : 'N/A'}</span>
+                          <span>Last Modified: {cve.lastModified ? new Date(cve.lastModified).toLocaleDateString() : 'N/A'}</span>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    ))}
+                  </div>
                 </div>
-              )}
+              ) : cveResults ? (
+                <div className="py-12 text-center space-y-2 bg-slate-950/30 border border-slate-900 rounded-2xl">
+                  <ShieldAlert className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p className="text-xs text-slate-400 font-mono">No matching CVE records found for query "{cveQuery}".</p>
+                </div>
+              ) : null}
             </div>
           )}
 
-          {/* 5. TIED AI INTELLIGENCE TAB */}
-          {activeTab === 'intelligence' && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-950/40 p-3 rounded-xl border border-slate-800/60">
-                <span className="text-xs font-mono font-bold text-slate-400">Select Intelligence Tier:</span>
-                <div className="flex gap-1.5">
-                  {(['fast', 'general', 'complex'] as const).map((tier) => (
-                    <button
-                      key={tier}
-                      type="button"
-                      onClick={() => setIntelTaskType(tier)}
-                      className={`text-[10px] font-mono font-bold px-3 py-1.5 rounded-lg border transition-all cursor-pointer uppercase ${
-                        intelTaskType === tier
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                          : 'bg-slate-950/80 border-slate-800 text-slate-500 hover:text-slate-300'
-                      }`}
-                    >
-                      {tier === 'complex' && 'Pro Analyst (Complex)'}
-                      {tier === 'general' && 'Standard (General)'}
-                      {tier === 'fast' && 'Lite Operator (Fast)'}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
-              {/* Chat History scroll panel */}
-              <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-4 h-[320px] overflow-y-auto space-y-4">
-                {intelChatHistory.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex flex-col max-w-[85%] ${
-                      msg.sender === 'user' ? 'ml-auto items-end' : 'mr-auto items-start'
-                    }`}
-                  >
-                    <div
-                      className={`p-3.5 rounded-2xl text-xs leading-relaxed ${
-                        msg.sender === 'user'
-                          ? 'bg-cyan-950/20 border border-cyan-500/30 text-cyan-200 rounded-tr-none'
-                          : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-none'
-                      }`}
-                    >
-                      <div className="whitespace-pre-wrap font-sans">{msg.text}</div>
-                    </div>
-                    <span className="text-[8px] text-slate-600 font-mono mt-1">{msg.timestamp}</span>
-                  </div>
-                ))}
-                {intelLoading && (
-                  <div className="flex items-center gap-2 text-slate-500 text-xs font-mono animate-pulse">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Gemini is compiling response...</span>
-                  </div>
-                )}
-              </div>
 
-              {/* Chat Input form */}
-              <form onSubmit={handleIntelSubmit} className="flex gap-2.5">
-                <input
-                  type="text"
-                  value={intelMessage}
-                  onChange={(e) => setIntelMessage(e.target.value)}
-                  placeholder={`Send a query for the ${intelTaskType.toUpperCase()} analyzer...`}
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-all font-sans"
-                  disabled={intelLoading}
-                />
-                <button
-                  type="submit"
-                  disabled={intelLoading || !intelMessage.trim()}
-                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-5 rounded-xl border border-amber-400/20 transition-all shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0"
-                >
-                  <span>Query AI</span>
-                </button>
-              </form>
-            </div>
-          )}
+
 
           {/* 6. OSINT FORENSICS TAB */}
           {activeTab === 'osint' && (

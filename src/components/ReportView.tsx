@@ -98,7 +98,7 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-    doc.text('AI INTELLIGENCE REPORT', 15, y);
+    doc.text('CYBER FORENSIC AUDIT SUMMARY', 15, y);
     y += 5;
 
     doc.setFont('helvetica', 'normal');

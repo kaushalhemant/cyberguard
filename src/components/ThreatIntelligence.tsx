@@ -20,7 +20,7 @@ export default function ThreatIntelligence({ token }: ThreatIntelligenceProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/ai/threat-intelligence', {
+      const response = await fetch('/api/threat-intelligence', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -78,11 +78,11 @@ export default function ThreatIntelligence({ token }: ThreatIntelligenceProps) {
             <Globe className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
             <span>GLOBAL THREAT RADAR</span>
             <span className="bg-cyan-500/15 text-[8px] text-cyan-300 px-1.5 py-0.5 rounded flex items-center gap-1 font-sans">
-              <Bot className="w-2.5 h-2.5 text-cyan-400" />
+              <ShieldCheck className="w-2.5 h-2.5 text-cyan-400" />
               CyberGuard Core
             </span>
           </div>
-          <h3 className="font-bold text-sm text-white font-display mt-1">AI Threat Intelligence</h3>
+          <h3 className="font-bold text-sm text-white font-display mt-1">Global Threat Intelligence</h3>
           <p className="text-[10px] text-slate-500 mt-0.5">Real-time global cybersecurity alerts & trending exploits.</p>
         </div>
         <button

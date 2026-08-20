@@ -82,35 +82,29 @@ export default function PrivacyStatementModal({
             </p>
             <ul className="list-disc pl-5 space-y-1 text-slate-500 text-xs">
               <li>
-                <strong className="text-slate-300">Live Gmail Vulnerability Scans:</strong> When you connect your Google Account, emails retrieved from your primary category inbox are parsed <strong className="text-cyan-400 font-mono">strictly in-memory transiently</strong> on our secure server. We never log, cache, or persist full email bodies, header records, or attachments onto physical media.
-              </li>
-              <li>
                 <strong className="text-slate-300">URL, Text, and Document Assets:</strong> Submitted malicious links, images, or log text are analyzed in-memory and immediately destroyed. We do not store persistent copies of files or scanned strings.
               </li>
               <li>
-                <strong className="text-slate-300">Audit Histories:</strong> To maintain your timeline of scan statistics (vulnerability ratings, file sizes, timestamps), we store minimal cryptographic metadata (risk scores, summary classifications). This metadata is shielded by Firebase Authentication security rules.
+                <strong className="text-slate-300">Audit Histories:</strong> To maintain your timeline of scan statistics (vulnerability ratings, file sizes, timestamps), we store minimal cryptographic metadata (risk scores, summary classifications).
               </li>
             </ul>
           </div>
 
-          {/* Section 2: Gemini Processing */}
+          {/* Section 2: Local Security Engine */}
           <div className="bg-slate-950/45 border border-slate-850 rounded-2xl p-4 md:p-5 space-y-2.5">
             <h3 className="font-bold text-white font-display flex items-center gap-2 text-sm">
               <Eye className="w-4 h-4 text-cyan-400" />
-              <span>2. Secure AI Engine (Gemini API) Processing</span>
+              <span>2. High-Performance Security Engine Processing</span>
             </h3>
             <p className="text-slate-400 text-xs">
-              Our advanced threat scanning features leverage Google's enterprise-grade Gemini API models. All integrations enforce high-security standards:
+              Our advanced threat scanning features run using deterministic, high-performance security heuristics. All integrations enforce high-security standards:
             </p>
             <ul className="list-disc pl-5 space-y-1 text-slate-500 text-xs">
               <li>
-                <strong className="text-slate-300">No Model Retraining:</strong> In compliance with enterprise terms, none of the Gmail content, links, files, or text you submit to our AI engines are logged for base-model fine-tuning, training, or weights development by Google or CyberGuard.
+                <strong className="text-slate-300">Data Sovereignty:</strong> Scanned data is processed locally without transmission to third-party AI training APIs.
               </li>
               <li>
-                <strong className="text-slate-300">Encrypted Transport:</strong> All data payloads sent to our server proxies and subsequently to Gemini API endpoints are encrypted in transit using industry-standard TLS 1.3 / 256-bit AES mechanisms.
-              </li>
-              <li>
-                <strong className="text-slate-300">Source Verification (Grounding):</strong> Grounded queries use dynamic real-time search proxies to cross-reference threats without sharing user account identifiers.
+                <strong className="text-slate-300">Encrypted Transport:</strong> All session traffic is encrypted in transit using industry-standard TLS 1.3 / 256-bit AES mechanisms.
               </li>
             </ul>
           </div>

@@ -1,5 +1,4 @@
 import { Breach, ThreatIntelligenceReport } from "../types";
-import { generateMultiAiResponse, generateMultiAiJson } from "./ai/multiAiAdapter";
 
 export interface ThreatReport {
   riskScore: number;
@@ -60,10 +59,10 @@ const LOCAL_THREAT_INTEL: ThreatIntelligenceReport = {
   phishingTactics: [
     {
       id: "tactic-cg-001",
-      name: "AI Voice-Synthesis & Executive Deepfake Phishing",
+      name: "Executive Deepfake & Voice-Synthesis Phishing",
       trendLevel: "surging",
       targetAudience: "Finance Managers and Personnel",
-      description: "Threat actors use high-fidelity AI audio synthesis models trained on public corporate videos to clone senior executive voices, instructing employees to authorize emergency wire transfers.",
+      description: "Threat actors use cloned audio synthesis models trained on public corporate videos to clone senior executive voices, instructing employees to authorize emergency wire transfers.",
       redFlags: [
         "Unusual requests bypassing standard multi-tier financial approvals",
         "High degree of fabricated urgency over non-traditional communication platforms",
@@ -102,131 +101,98 @@ const LOCAL_THREAT_INTEL: ThreatIntelligenceReport = {
 };
 
 /**
- * 1. BREACH REPORT AI GENERATOR
+ * 1. BREACH REPORT GENERATOR
  */
 export async function generateBreachReportSummary(
   targetEmail: string,
   breaches: Breach[],
   riskScore: number
 ): Promise<string> {
-  const prompt = `
-    Analyze the following data breach exposure report for email address: "${targetEmail}".
-    Risk Score: ${riskScore}/100.
-    Breaches: ${JSON.stringify(breaches.map(b => ({ title: b.Title, domain: b.Domain, date: b.BreachDate, data: b.DataClasses })))}
+  const breachCount = breaches.length;
+  const highRiskBreaches = breaches.filter(b => b.severity === 'critical' || b.severity === 'high');
+  const allDataClasses = Array.from(new Set(breaches.flatMap(b => b.DataClasses)));
 
-    Provide a concise, authoritative cybersecurity assessment in clean markdown:
-    1. EXECUTIVE THREAT SUMMARY
-    2. VULNERABILITY LEVEL & REASONING (${riskScore}/100)
-    3. CRITICAL MITIGATION CHECKLIST
-  `;
+  let summary = `### 🛡️ CyberGuard Security Threat Assessment\n\n`;
+  summary += `**Target Identity**: \`${targetEmail}\`  \n`;
+  summary += `**Calculated Risk Index**: **${riskScore}/100** (${riskScore >= 70 ? '🔴 CRITICAL HAZARD' : riskScore >= 40 ? '🟡 ELEVATED EXPOSURE' : '🟢 MINIMAL RISK'})  \n`;
+  summary += `**Total Breach Exposures**: **${breachCount} Incident(s)**  \n\n`;
 
-  return generateMultiAiResponse(
-    prompt,
-    "You are CyberGuard AI, an elite cybersecurity incident responder.",
-    () => {
-      const breachCount = breaches.length;
-      const highRiskBreaches = breaches.filter(b => b.severity === 'critical' || b.severity === 'high');
-      const allDataClasses = Array.from(new Set(breaches.flatMap(b => b.DataClasses)));
+  if (breachCount === 0) {
+    summary += `#### 🟢 Zero Exposure Detected\n`;
+    summary += `CyberGuard security database cross-referenced \`${targetEmail}\` across public and dark-web repositories. No known credential dumps or leaks were found.\n\n`;
+    summary += `#### Recommended Security Hygiene:\n`;
+    summary += `- Enable Multi-Factor Authentication (MFA) across all services.\n`;
+    summary += `- Perform periodic monitoring to catch new breach dumps.\n`;
+    return summary;
+  }
 
-      let summary = `### 🛡️ CyberGuard AI Executive Threat Assessment\n\n`;
-      summary += `**Target Identity**: \`${targetEmail}\`  \n`;
-      summary += `**Calculated Risk Index**: **${riskScore}/100** (${riskScore >= 70 ? '🔴 CRITICAL HAZARD' : riskScore >= 40 ? '🟡 ELEVATED EXPOSURE' : '🟢 MINIMAL RISK'})  \n`;
-      summary += `**Total Breach Exposures**: **${breachCount} Incident(s)**  \n\n`;
+  summary += `#### 🚨 Vulnerability & Exposure Analysis\n`;
+  summary += `An analysis of leaked databases indicates your identity was involved in **${breachCount} major security breaches** (${highRiskBreaches.length} high-severity incidents).  \n\n`;
+  summary += `**Compromised Data Categories**:\n`;
+  summary += allDataClasses.map(dc => `- 🔑 **${dc}**`).join('\n') + `\n\n`;
 
-      if (breachCount === 0) {
-        summary += `#### 🟢 Zero Exposure Detected\n`;
-        summary += `CyberGuard's neural intelligence database cross-referenced \`${targetEmail}\` across public and dark-web repositories. No known credential dumps or leaks were found.\n\n`;
-        summary += `#### Recommended Hygiene:\n`;
-        summary += `- Enable Multi-Factor Authentication (MFA) across all services.\n`;
-        summary += `- Perform periodic monitoring to catch new breach dumps.\n`;
-        return summary;
-      }
+  summary += `#### 📋 Exposed Incident Timeline:\n`;
+  breaches.forEach(b => {
+    summary += `- **${b.Title}** (\`${b.Domain}\`) - Leaked on **${b.BreachDate}**  \n  *Exposed Attributes*: ${b.DataClasses.join(', ')}  \n`;
+  });
 
-      summary += `#### 🚨 Vulnerability & Exposure Analysis\n`;
-      summary += `An analysis of leaked databases indicates your identity was involved in **${breachCount} major security breaches** (${highRiskBreaches.length} high-severity incidents).  \n\n`;
-      summary += `**Compromised Data Categories**:\n`;
-      summary += allDataClasses.map(dc => `- 🔑 **${dc}**`).join('\n') + `\n\n`;
+  summary += `\n#### ⚡ Critical Remediation Checklist:\n`;
+  summary += `1. **Rotate Credentials Immediately**: Change passwords on all compromised platforms (${breaches.map(b => b.Title).join(', ')}). Never reuse passwords.\n`;
+  summary += `2. **Deploy Enterprise Password Vault**: Use an encrypted password manager (Bitwarden / 1Password) to generate unique passphrases.\n`;
+  summary += `3. **Enforce FIDO2 / TOTP MFA**: Replace SMS OTPs with authenticator apps or hardware keys.\n`;
+  summary += `4. **Spear-Phishing Guard**: Watch out for targeted emails citing your username or personal details.\n`;
 
-      summary += `#### 📋 Exposed Incident Timeline:\n`;
-      breaches.forEach(b => {
-        summary += `- **${b.Title}** (\`${b.Domain}\`) - Leaked on **${b.BreachDate}**  \n  *Exposed Attributes*: ${b.DataClasses.join(', ')}  \n`;
-      });
-
-      summary += `\n#### ⚡ Critical Remediation Checklist:\n`;
-      summary += `1. **Rotate Credentials Immediately**: Change passwords on all compromised platforms (${breaches.map(b => b.Title).join(', ')}). Never reuse passwords.\n`;
-      summary += `2. **Deploy Enterprise Password Vault**: Use an encrypted password manager (Bitwarden / 1Password) to generate unique passphrases.\n`;
-      summary += `3. **Enforce FIDO2 / TOTP MFA**: Replace SMS OTPs with authenticator apps or hardware keys.\n`;
-      summary += `4. **Spear-Phishing Guard**: Watch out for targeted emails citing your username or personal details.\n`;
-
-      return summary;
-    }
-  );
+  return summary;
 }
 
 /**
- * 2. LINK / URL SAFETY AI INSPECTOR
+ * 2. LINK / URL SAFETY INSPECTOR
  */
 export async function generateLinkThreatReport(url: string): Promise<ThreatReport> {
-  const prompt = `
-    Analyze target URL for potential cybersecurity threats: "${url}".
-    Respond strictly with valid JSON:
-    {
-      "riskScore": number (0-100),
-      "threats": [string],
-      "aiSummary": string (markdown report)
-    }
-  `;
+  const threats: string[] = [];
+  let riskScore = 10;
+  const lowercaseUrl = url.toLowerCase();
 
-  return generateMultiAiJson<ThreatReport>(
-    prompt,
-    "You are CyberGuard Neural Link Inspector. Respond strictly in valid JSON.",
-    () => {
-      const threats: string[] = [];
-      let riskScore = 10;
-      const lowercaseUrl = url.toLowerCase();
+  if (lowercaseUrl.includes('login') || lowercaseUrl.includes('signin') || lowercaseUrl.includes('verify') || lowercaseUrl.includes('bank') || lowercaseUrl.includes('secure')) {
+    threats.push("High-risk credential harvesting keywords in URL path");
+    riskScore += 25;
+  }
+  if (lowercaseUrl.match(/\.(xyz|info|top|cc|gq|cf|ml|tk|download|zip|click)$/)) {
+    threats.push("High-risk Top-Level Domain (TLD) commonly associated with malware hosts");
+    riskScore += 30;
+  }
+  if (lowercaseUrl.includes('free') || lowercaseUrl.includes('gift') || lowercaseUrl.includes('promo') || lowercaseUrl.includes('reward')) {
+    threats.push("Deceptive lure pattern / social engineering incentive");
+    riskScore += 20;
+  }
+  if (lowercaseUrl.match(/(\d{1,3}\.){3}\d{1,3}/)) {
+    threats.push("Raw IP address used as host (bypasses domain reputation & SSL validation)");
+    riskScore += 35;
+  }
+  if (lowercaseUrl.includes('paypa1') || lowercaseUrl.includes('g00gle') || lowercaseUrl.includes('m1crosoft') || lowercaseUrl.includes('netfl1x')) {
+    threats.push("Typosquatting brand impersonation character substitution");
+    riskScore += 40;
+  }
+  if (url.length > 90) {
+    threats.push("Excessive URL length & parameter obfuscation suspect");
+    riskScore += 15;
+  }
 
-      if (lowercaseUrl.includes('login') || lowercaseUrl.includes('signin') || lowercaseUrl.includes('verify') || lowercaseUrl.includes('bank') || lowercaseUrl.includes('secure')) {
-        threats.push("High-risk credential harvesting keywords in URL path");
-        riskScore += 25;
-      }
-      if (lowercaseUrl.match(/\.(xyz|info|top|cc|gq|cf|ml|tk|download|zip|click)$/)) {
-        threats.push("High-risk Top-Level Domain (TLD) commonly associated with malware hosts");
-        riskScore += 30;
-      }
-      if (lowercaseUrl.includes('free') || lowercaseUrl.includes('gift') || lowercaseUrl.includes('promo') || lowercaseUrl.includes('reward')) {
-        threats.push("Deceptive lure pattern / social engineering incentive");
-        riskScore += 20;
-      }
-      if (lowercaseUrl.match(/(\d{1,3}\.){3}\d{1,3}/)) {
-        threats.push("Raw IP address used as host (bypasses domain reputation & SSL validation)");
-        riskScore += 35;
-      }
-      if (lowercaseUrl.includes('paypa1') || lowercaseUrl.includes('g00gle') || lowercaseUrl.includes('m1crosoft') || lowercaseUrl.includes('netfl1x')) {
-        threats.push("Typosquatting brand impersonation character substitution");
-        riskScore += 40;
-      }
-      if (url.length > 90) {
-        threats.push("Excessive URL length & parameter obfuscation suspect");
-        riskScore += 15;
-      }
+  riskScore = Math.min(riskScore, 100);
+  if (threats.length === 0) {
+    threats.push("Standard domain structure - No high-risk anomaly flags triggered");
+  }
 
-      riskScore = Math.min(riskScore, 100);
-      if (threats.length === 0) {
-        threats.push("Standard domain structure - No high-risk anomaly flags triggered");
-      }
+  let summary = `### 🔍 CyberGuard Link Forensic Inspection\n\n`;
+  summary += `**Inspected Target**: \`${url}\`  \n`;
+  summary += `**Threat Index**: **${riskScore}/100** (${riskScore >= 70 ? '🚨 HIGH HAZARD' : riskScore >= 40 ? '⚠️ SUSPICIOUS' : '🟢 LOW RISK'})  \n\n`;
+  summary += `#### Identified Security Indicators:\n`;
+  summary += threats.map(t => `- 🛑 **${t}**`).join('\n') + `\n\n`;
+  summary += `#### Action Checklist:\n`;
+  summary += `1. **DO NOT Input Credentials**: Do not submit passwords or MFA tokens on this page.\n`;
+  summary += `2. **Verify Official Domain**: Ensure the address bar matches the official company domain.\n`;
 
-      let summary = `### 🔍 CyberGuard Neural Link Inspection\n\n`;
-      summary += `**Inspected Target**: \`${url}\`  \n`;
-      summary += `**Threat Index**: **${riskScore}/100** (${riskScore >= 70 ? '🚨 HIGH HAZARD' : riskScore >= 40 ? '⚠️ SUSPICIOUS' : '🟢 LOW RISK'})  \n\n`;
-      summary += `#### Identified Security Indicators:\n`;
-      summary += threats.map(t => `- 🛑 **${t}**`).join('\n') + `\n\n`;
-      summary += `#### Action Checklist:\n`;
-      summary += `1. **DO NOT Input Credentials**: Do not submit passwords or MFA tokens on this page.\n`;
-      summary += `2. **Verify Official Domain**: Ensure the address bar matches the official company domain.\n`;
-
-      return { riskScore, threats, aiSummary: summary };
-    }
-  );
+  return { riskScore, threats, aiSummary: summary };
 }
 
 /**
@@ -276,169 +242,11 @@ export async function generateImageThreatReport(
 }
 
 /**
- * 4. SEARCH GROUNDING & KNOWLEDGE ENGINE
- */
-export async function performSearchGrounding(query: string): Promise<{ text: string; sources: { title: string; url: string }[] }> {
-  const lowerQuery = query.toLowerCase().trim();
-  let text = '';
-  const sources: { title: string; url: string }[] = [];
-
-  let matchedKey = Object.keys(SECURITY_KNOWLEDGE_BASE).find(k => lowerQuery.includes(k));
-
-  if (matchedKey) {
-    text = `### 🌐 CyberGuard Security Grounding Analysis\n\n` +
-      `**Query Topic**: "${query}"  \n\n` +
-      `${SECURITY_KNOWLEDGE_BASE[matchedKey]}  \n\n` +
-      `#### 📊 Technical Analysis & Mitigation Guidance:\n` +
-      `- **Primary Defense**: Enforce continuous automated vulnerability scanning, least privilege access (PoLP), and Zero Trust Network Access (ZTNA).\n` +
-      `- **Audit Control**: Log all API endpoints and monitor user access anomalies in real-time.`;
-
-    sources.push({
-      title: `CyberGuard SOC Knowledge Base - ${matchedKey.toUpperCase()} Deep Dive`,
-      url: `https://cyberguard.internal/kb/${encodeURIComponent(matchedKey)}`
-    });
-    sources.push({
-      title: `NIST Computer Security Resource Center (CSRC)`,
-      url: `https://csrc.nist.gov/publications`
-    });
-  } else {
-    text = `### 🌐 CyberGuard Intelligence Report: "${query}"\n\n` +
-      `Based on CyberGuard's global threat intelligence database:\n\n` +
-      `1. **Overview**: Security analysis for "${query}" shows modern threat vectors emphasize automated scanning, credential reuse, and identity spoofing.\n` +
-      `2. **Key Indicators**: Watch for anomalous IP access patterns, unverified OAuth app consent grants, and unpatched software dependencies.\n` +
-      `3. **Recommended Actions**:  \n` +
-      `   - Conduct regular endpoint breach assessments.  \n` +
-      `   - Implement multi-factor authentication (MFA) across all identity providers.  \n` +
-      `   - Enforce Web Application Firewall (WAF) filtering on public API endpoints.`;
-
-    sources.push({
-      title: `CyberGuard Global Threat Database`,
-      url: `https://cyberguard.internal/threat-intel`
-    });
-    sources.push({
-      title: `OWASP Foundation Security Standards`,
-      url: `https://owasp.org/www-project-top-ten/`
-    });
-  }
-
-  return { text, sources };
-}
-
-/**
- * 5. TIERED CONVERSATIONAL AI OPERATOR
- */
-export async function performGeminiIntelligence(
-  message: string,
-  taskType: 'complex' | 'general' | 'fast'
-): Promise<string> {
-  const prompt = `User Security Query: "${message}". Task complexity level: ${taskType}.`;
-  
-  return generateMultiAiResponse(
-    prompt,
-    `You are CyberGuard AI Operator (${taskType} tier). Provide concise, professional, bulletproof cybersecurity guidance.`,
-    () => {
-      const lowerMsg = message.toLowerCase().trim();
-
-      if (lowerMsg.includes('hello') || lowerMsg.includes('hi') || lowerMsg.includes('hey')) {
-        return `Hello! I am **CyberGuard AI**, your dedicated cybersecurity neural operator. How can I assist you with breach analysis, threat intelligence, firewall configuration, or security policies today?`;
-      }
-
-      if (lowerMsg.includes('who are you') || lowerMsg.includes('what can you do') || lowerMsg.includes('help')) {
-        return `I am **CyberGuard AI**, an in-house cybersecurity artificial intelligence engine. Here is what I can do:\n\n` +
-          `- 🛡️ **Breach Auditing**: Analyze email addresses for leaked passwords and identity exposures.\n` +
-          `- 🔍 **URL & Link Safety**: Detect phishing, typosquatting, and malicious landing pages.\n` +
-          `- 👁️ **Visual Threat Scan**: Audit screenshots and files for scam indicators.\n` +
-          `- 💬 **Security Operator**: Provide real-time advice on firewall rules, SOC 2 compliance, encryption, and zero-day vulnerabilities.`;
-      }
-
-      if (taskType === 'complex') {
-        return `### 🏛️ CyberGuard Principal Security Architect Assessment\n\n` +
-          `**Task Objective**: *"${message}"*\n\n` +
-          `#### 1. Architectural Risk Analysis:\n` +
-          `- **Threat Vectors**: External API exfiltration, unencrypted database storage, unauthorized role escalation.\n` +
-          `- **Impact Level**: Critical - Could compromise confidentiality and system integrity if unmitigated.\n\n` +
-          `#### 2. Technical Mitigation Strategy:\n` +
-          `\`\`\`bash\n` +
-          `# Enforce Strict Firewall & Traffic Rules (iptables / UFW)\n` +
-          `sudo ufw default deny incoming\n` +
-          `sudo ufw default allow outgoing\n` +
-          `sudo ufw allow 443/tcp comment 'HTTPS Production'\n` +
-          `sudo ufw limit 22/tcp comment 'Rate limited SSH'\n` +
-          `\`\`\`\n\n` +
-          `#### 3. Recommended Security Controls:\n` +
-          `1. **Data Encryption at Rest**: Encrypt all database tables using AES-256-GCM authenticated encryption.\n` +
-          `2. **Strict Identity Access**: Implement Role-Based Access Control (RBAC) with HMAC-SHA256 session tokens.\n` +
-          `3. **Zero Trust Architecture**: Verify all incoming HTTP payloads against schema boundaries.`;
-      } else if (taskType === 'fast') {
-        return `⚡ **CyberGuard Rapid Check**: For *"${message}"*:\n\n` +
-          `- 🟢 **Verdict**: Enforce MFA, rotate old keys, and monitor logs.\n` +
-          `- 🔒 **Quick Fix**: Verify HTTPS SSL configuration and restrict public API access rules.`;
-      }
-
-      return `### 🛡️ CyberGuard AI Security Analysis\n\n` +
-        `Regarding your inquiry on *"${message}"*:\n\n` +
-        `1. **Current Security Exposure**: Identity leaks and phishing remain the leading vectors for compromise. Always verify sender domains before entering passwords.\n` +
-        `2. **Best Practices**:  \n` +
-        `   - Never reuse passwords across accounts.  \n` +
-        `   - Use hardware-backed or app-based 2FA.  \n` +
-        `   - Perform regular identity breach checks using CyberGuard.`;
-    }
-  );
-}
-
-/**
- * 6. GMAIL MESSAGE FORENSICS AI
- */
-export async function generateGmailMessageThreatReport(
-  from: string,
-  subject: string,
-  snippet: string,
-  body: string
-): Promise<ThreatReport> {
-  const threats: string[] = [];
-  let riskScore = 10;
-  const content = `${from} ${subject} ${snippet} ${body}`.toLowerCase();
-
-  if (content.includes('password') || content.includes('login') || content.includes('credential') || content.includes('verify')) {
-    threats.push("Request for user credentials / identity verification");
-    riskScore += 30;
-  }
-  if (content.includes('urgent') || content.includes('immediate') || content.includes('suspended')) {
-    threats.push("Fabricated urgency / account suspension coercion tactic");
-    riskScore += 25;
-  }
-  if (content.includes('bank') || content.includes('paypal') || content.includes('invoice') || content.includes('payment')) {
-    threats.push("Financial transaction or payment gateway keyword");
-    riskScore += 20;
-  }
-
-  riskScore = Math.min(riskScore, 100);
-  if (threats.length === 0) {
-    threats.push("Standard email message structure - No malicious indicators flagged");
-  }
-
-  let summary = `### 📧 CyberGuard Gmail Forensics Report\n\n`;
-  summary += `**Sender**: \`${from}\`  \n`;
-  summary += `**Subject**: "${subject}"  \n`;
-  summary += `**Phishing Risk Score**: **${riskScore}/100** (${riskScore >= 60 ? '🚨 HIGH HAZARD' : riskScore >= 35 ? '⚠️ SUSPICIOUS' : '🟢 SAFE'})  \n\n`;
-  summary += `#### Identified Security Flags:\n`;
-  summary += threats.map(t => `- 🚩 **${t}**`).join('\n') + `\n\n`;
-
-  return { riskScore, threats, aiSummary: summary };
-}
-
-/**
- * 7. GLOBAL THREAT INTELLIGENCE AI REPORT
+ * 4. GLOBAL THREAT INTELLIGENCE REPORT
  */
 export async function generateThreatIntelligenceReport(): Promise<ThreatIntelligenceReport> {
-  const prompt = `Generate top 3 active global cybersecurity alerts and 3 trending phishing tactics in valid JSON format.`;
-
-  return generateMultiAiJson<ThreatIntelligenceReport>(
-    prompt,
-    "You are CyberGuard Global Threat Intelligence Engine. Output strictly valid JSON matching schema with alerts, phishingTactics, lastUpdated.",
-    () => ({
-      ...LOCAL_THREAT_INTEL,
-      lastUpdated: new Date().toISOString()
-    })
-  );
+  return {
+    ...LOCAL_THREAT_INTEL,
+    lastUpdated: new Date().toISOString()
+  };
 }

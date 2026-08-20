@@ -32,7 +32,7 @@ export async function checkPhishStats(targetUrl: string): Promise<PhishStatsMatc
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const queryUrl = `https://phishstats.info/api/v2/phishing?_where=(host,like,~${hostname}~)&_size=1`;
+    const queryUrl = `https://phishstats.info/api/v2/phishing?_where=(host,like,~${encodeURIComponent(hostname)}~)&_size=1`;
     const response = await fetch(queryUrl, {
       method: 'GET',
       headers,

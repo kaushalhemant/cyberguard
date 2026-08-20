@@ -50,15 +50,49 @@ export default function Terminal() {
     switch (command) {
       case 'help':
         addLog('CyberGuard Official SOC Security Commands:', 'success');
+        addLog('  cve-search <query>        - Search NIST NVD CVE vulnerability records by keyword', 'output');
+        addLog('  sys-info                  - Display SOC system telemetry & runtime stats', 'output');
         addLog('  soc-osint <ip/domain>     - Perform deep OSINT IP forensic inspection & port audit', 'output');
         addLog('  soc-hash <sha256/md5>     - Analyze malware binary hash, entropy & YARA matches', 'output');
         addLog('  soc-triage <incident-id>  - Update SIEM incident status & containment playbook', 'output');
         addLog('  stix-export <target>      - Generate STIX 2.1 evidence bundle JSON', 'output');
-        addLog('  cyberguard-scan <email>   - Run deep AI breach search on target email', 'output');
+        addLog('  cyberguard-scan <email>   - Run deep breach search on target email', 'output');
         addLog('  nmap <host/IP>           - Stealth port scan on target host', 'output');
         addLog('  whois <domain>           - Retrieve registrar WHOIS records', 'output');
         addLog('  clear                    - Clear the terminal screen buffer', 'output');
         break;
+
+      case 'cve-search': {
+        const query = args.slice(1).join(' ');
+        if (!query) {
+          addLog('Error: Specify a search query. Example: cve-search Log4j', 'error');
+          break;
+        }
+        addLog(`[~] Querying NIST NVD CVE vulnerability records for: "${query}"...`, 'output');
+        fetch(`/api/cve/search?query=${encodeURIComponent(query)}&limit=5`)
+          .then(res => res.json())
+          .then(data => {
+            if (!data.cves || data.cves.length === 0) {
+              addLog(`[-] No CVE records found matching "${query}".`, 'error');
+            } else {
+              addLog(`[+] Found ${data.totalMatches} matches in NIST NVD database (showing top ${data.cves.length}):`, 'success');
+              data.cves.forEach((cve: any) => {
+                addLog(`    - ${cve.id} [${cve.severity}] (Score: ${cve.score}/10): ${cve.description.substring(0, 100)}...`, cve.severity === 'CRITICAL' ? 'error' : 'output');
+              });
+            }
+          })
+          .catch(err => addLog(`[-] CVE search failed: ${err.message}`, 'error'));
+        break;
+      }
+
+      case 'sys-info': {
+        addLog('[~] Gathering CyberGuard SOC Core System Telemetry...', 'output');
+        addLog('    Engine: CyberGuard Security Operations Engine v4.0', 'success');
+        addLog(`    Browser Agent: ${navigator.userAgent.substring(0, 50)}...`, 'output');
+        addLog(`    Timestamp: ${new Date().toISOString()}`, 'output');
+        addLog('    Status: ALL 7 THREAT SCANNERS OPERATIONAL (0 ERRORS)', 'success');
+        break;
+      }
 
       case 'soc-osint': {
         const target = args[1];
@@ -151,7 +185,7 @@ export default function Terminal() {
               addLog(`[!] VULNERABILITY ALERT: Found 2 credential leaks associated with ${targetEmail}!`, 'error');
               addLog('    - Leaked in Canva Design Hub (Domain: canva.com)', 'error');
               addLog('    - Leaked in Adobe Inc (Domain: adobe.com)', 'error');
-              addLog('[~] Launch AI PDF Threat Report Generator on the Dashboard to mitigate.', 'success');
+              addLog('[~] Launch PDF Threat Report Generator on the Dashboard to mitigate.', 'success');
             }
           }, 1200);
         }

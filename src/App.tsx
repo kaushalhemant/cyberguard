@@ -249,7 +249,7 @@ export default function App() {
 
       {/* FOOTER AREA */}
       <footer className="border-t border-slate-900 py-5 text-center text-[11px] font-mono text-slate-500 print:hidden mt-12 bg-slate-950">
-        <p>© 2026 CyberGuard Official Command. Powered by CyberGuard Native Neural AI Engine.</p>
+        <p>© 2026 CyberGuard Official Command. Powered by CyberGuard Security Operations Engine.</p>
         <p className="mt-1 text-slate-600">Enterprise Cybersecurity Official Edition - All Threat Scanning & Forensic Suite Features Unlocked.</p>
       </footer>
 

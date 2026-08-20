@@ -61,7 +61,7 @@ export async function runSublimeAnalysis(emlContent: string | Buffer): Promise<S
       PYTHONIOENCODING: 'utf-8'
     };
 
-    const { stdout } = await execPromise(command, { env, maxBuffer: 10 * 1024 * 1024, timeout: 35000 });
+    const { stdout } = await execPromise(command, { env, maxBuffer: 10 * 1024 * 1024, timeout: 45000 });
     
     if (!stdout || !stdout.trim()) {
       return null;

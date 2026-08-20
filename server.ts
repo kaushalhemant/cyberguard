@@ -15,7 +15,7 @@ function getEnv(key: string, defaultValue: string = ''): string {
 }
 
 import { db, hashPassword } from './src/server/db';
-import { generateBreachReportSummary, generateLinkThreatReport, generateImageThreatReport, performSearchGrounding, performGeminiIntelligence, generateGmailMessageThreatReport, generateThreatIntelligenceReport } from './src/server/cyberguardAI';
+import { generateBreachReportSummary, generateLinkThreatReport, generateImageThreatReport, generateThreatIntelligenceReport } from './src/server/cyberguardAI';
 import { scanUrl, scanEmail, scanImage, scanUnified } from './src/server/scanners/unifiedScanner';
 import { searchCves, getLatestCves } from './src/server/scanners/cveScanner';
 import { User, Breach, ScanResult } from './src/types';
@@ -373,66 +373,14 @@ app.post('/api/auth/firebase-sync', async (req, res) => {
   res.json({ user, token });
 });
 
-// AI Search Grounding Route
-app.post('/api/ai/search-grounding', authenticate, async (req: AuthenticatedRequest, res) => {
-  const { query } = req.body;
-  if (!query) {
-    return res.status(400).json({ error: 'Search query is required' });
-  }
-
-  try {
-    const result = await performSearchGrounding(query);
-    res.json(result);
-  } catch (err: any) {
-    console.error("Search grounding route alert:", err);
-    res.json({
-      text: `### 🌐 CyberGuard Security Grounding\n\nAnalyzed Query: "${query}"\n\n- **Primary Security Action**: Enforce multi-factor authentication (MFA) and least privilege access (PoLP).\n- **Monitoring**: Log all API endpoints and monitor system access in real-time.`,
-      sources: [{ title: 'CyberGuard Security Knowledge Base', url: 'https://cyberguard.internal' }]
-    });
-  }
-});
-
-// AI Intelligence Tiered Route
-app.post('/api/ai/intelligence', authenticate, async (req: AuthenticatedRequest, res) => {
-  const { message, taskType } = req.body;
-  if (!message) {
-    return res.status(400).json({ error: 'Message payload is required' });
-  }
-
-  try {
-    const responseText = await performGeminiIntelligence(message, taskType || 'general');
-    res.json({ response: responseText });
-  } catch (err: any) {
-    console.error("Gemini Intelligence route alert:", err);
-    res.json({
-      response: `### 🛡️ CyberGuard AI Security Analysis\n\nRegarding your inquiry on *"${message}"*:\n\n1. **Security Assessment**: Ensure all identity access endpoints enforce robust multi-factor authentication (MFA).\n2. **Best Practices**: Rotate credentials regularly and monitor system access logs for anomalous behavior.`
-    });
-  }
-});
-
-// AI Global Threat Intelligence Route
-app.get('/api/ai/threat-intelligence', authenticate, async (req: AuthenticatedRequest, res) => {
+// Global Threat Intelligence Route
+app.get(['/api/threat-intelligence', '/api/ai/threat-intelligence'], authenticate, async (req: AuthenticatedRequest, res) => {
   try {
     const report = await generateThreatIntelligenceReport();
     res.json(report);
   } catch (err: any) {
     console.error("Threat Intelligence route error:", err);
-    res.json({
-      alerts: [
-        {
-          id: "intel-cg-fallback-01",
-          title: "Enterprise Active Directory Threat Auditing",
-          severity: "critical",
-          category: "Security Telemetry",
-          description: "Active monitoring of lateral privilege escalation and domain admin security policies.",
-          impact: "Identity protection and ransomware prevention.",
-          remediation: "Enforce strict EDR agent policies and restrict domain admin credentials.",
-          timestamp: new Date().toISOString()
-        }
-      ],
-      phishingTactics: [],
-      lastUpdated: new Date().toISOString()
-    });
+    res.status(500).json({ error: 'Failed to generate threat intelligence report.' });
   }
 });
 
@@ -753,48 +701,6 @@ app.post('/api/v2/scan/unified', authenticate, async (req: AuthenticatedRequest,
     res.json(report);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Unified multi-vector scanner error.' });
-  }
-});
-
-app.post('/api/scan-gmail-message', authenticate, async (req: AuthenticatedRequest, res) => {
-  const ip = req.ip || 'unknown';
-  if (isRateLimited(ip, 'scan-gmail', 10, 60 * 1000)) {
-    return res.status(429).json({ error: 'Gmail scan rate limit reached. Please wait a minute.' });
-  }
-
-  const { from, subject, snippet, body } = req.body;
-  if (!from || !subject) {
-    return res.status(400).json({ error: 'Sender (from) and subject are required.' });
-  }
-
-  const user = req.user!;
-
-  try {
-    const report = await generateGmailMessageThreatReport(from, subject, snippet || '', body || '');
-
-    const scanResult: ScanResult = {
-      id: crypto.randomUUID(),
-      targetEmail: user.email,
-      timestamp: new Date().toISOString(),
-      resultCount: report.threats.length,
-      breaches: [],
-      riskScore: report.riskScore,
-      aiSummary: report.aiSummary,
-      scanType: 'email',
-      detectedThreats: report.threats,
-      targetLink: `Gmail from: ${from}`,
-    };
-
-    await db.addScan(user.email, scanResult);
-    const updatedUser = await db.getUser(user.email);
-
-    res.json({
-      scan: scanResult,
-      user: updatedUser
-    });
-  } catch (error) {
-    console.error("Gmail message scanning failed:", error);
-    res.status(500).json({ error: 'Failed to process AI Gmail threat scanning.' });
   }
 });
 
@@ -1204,9 +1110,22 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[CyberGuard] Full-stack hub listening on http://0.0.0.0:${PORT}`);
-  });
+  function listenWithFallback(portToTry: number, retriesLeft = 10) {
+    const server = app.listen(portToTry, '0.0.0.0', () => {
+      console.log(`[CyberGuard] Full-stack hub listening on http://localhost:${portToTry}`);
+    });
+
+    server.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE' && retriesLeft > 0) {
+        console.warn(`[CyberGuard] Port ${portToTry} is in use. Trying port ${portToTry + 1}...`);
+        listenWithFallback(portToTry + 1, retriesLeft - 1);
+      } else {
+        console.error('[CyberGuard] Express server error:', err);
+      }
+    });
+  }
+
+  listenWithFallback(PORT);
 }
 
 export default app;

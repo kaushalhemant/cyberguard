@@ -28,7 +28,7 @@ def main():
         flagged_rules = []
 
         for item in rule_results:
-            if item.get("matched") is True:
+            if item.get("matched") is True or item.get("flagged") is True:
                 rule_info = item.get("rule") or {}
                 flagged_rules.append({
                     "name": rule_info.get("name") or item.get("name") or "Unnamed Threat Rule",

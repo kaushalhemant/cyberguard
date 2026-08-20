@@ -163,4 +163,16 @@ export interface SocIncident {
   timestamp: string;
 }
 
+export interface CveRecord {
+  id: string;
+  sourceIdentifier: string;
+  published: string;
+  lastModified: string;
+  vulnStatus: string;
+  description: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+  score: number;
+  vectorString?: string;
+}
+
 
