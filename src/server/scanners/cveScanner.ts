@@ -120,23 +120,28 @@ export async function searchCves(query: string, severityFilter?: string, limit: 
   cves: CveRecord[];
 }> {
   const cveList = await loadNvdCveDatabase();
-  if (!query || !query.trim()) {
+  const cleanQuery = (query || '').toLowerCase().trim();
+  const hasSevFilter = severityFilter && severityFilter.toUpperCase() !== 'ALL';
+
+  if (!cleanQuery && !hasSevFilter) {
     return {
       totalMatches: cveList.length,
       cves: cveList.slice(0, limit)
     };
   }
 
-  const cleanQuery = query.toLowerCase().trim();
   const filtered = cveList.filter(cve => {
-    const matchesQuery = cve.id.toLowerCase().includes(cleanQuery) ||
-      cve.description.toLowerCase().includes(cleanQuery) ||
-      cve.sourceIdentifier.toLowerCase().includes(cleanQuery);
+    if (cleanQuery) {
+      const matchesQuery = (cve.id || '').toLowerCase().includes(cleanQuery) ||
+        (cve.description || '').toLowerCase().includes(cleanQuery) ||
+        (cve.sourceIdentifier || '').toLowerCase().includes(cleanQuery);
+      if (!matchesQuery) return false;
+    }
 
-    if (!matchesQuery) return false;
-
-    if (severityFilter && severityFilter.toUpperCase() !== 'ALL') {
-      return cve.severity.toUpperCase() === severityFilter.toUpperCase();
+    if (hasSevFilter) {
+      if ((cve.severity || '').toUpperCase() !== severityFilter!.toUpperCase()) {
+        return false;
+      }
     }
     return true;
   });
