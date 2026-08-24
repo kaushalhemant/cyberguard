@@ -263,78 +263,104 @@ app.post('/api/auth/send-otp', async (req, res) => {
 });
 
 app.post('/api/auth/register', async (req, res) => {
-  const ip = req.ip || 'unknown';
-  if (isRateLimited(ip, 'register', 10, 60 * 1000)) {
-    return res.status(429).json({ error: 'Too many registration requests. Please wait a minute.' });
-  }
-
-  const { email, password, fullName, mobileNumber, otpDeliveryPref, otpCode } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters long' });
-  }
-
-  const emailLower = email.trim().toLowerCase();
-
-  // Verify OTP Code if provided (optional)
-  if (otpCode && otpCode !== '123456') {
-    const stored = pendingOtps.get(emailLower);
-    if (stored && Date.now() <= stored.expiresAt && stored.otp !== otpCode) {
-      return res.status(400).json({ error: 'Invalid verification OTP code. Please try again.' });
+  try {
+    const ip = req.ip || 'unknown';
+    if (isRateLimited(ip, 'register', 10, 60 * 1000)) {
+      return res.status(429).json({ error: 'Too many registration requests. Please wait a minute.' });
     }
+
+    const { email, password, fullName, mobileNumber, otpDeliveryPref, otpCode } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    const emailLower = email.trim().toLowerCase();
+
+    // Verify OTP Code if provided (optional)
+    if (otpCode && otpCode !== '123456') {
+      const stored = pendingOtps.get(emailLower);
+      if (stored && Date.now() <= stored.expiresAt && stored.otp !== otpCode) {
+        return res.status(400).json({ error: 'Invalid verification OTP code. Please try again.' });
+      }
+    }
+
+    // Clear pending OTP for this email
+    pendingOtps.delete(emailLower);
+
+    try {
+      const existingUser = await db.getUser(emailLower);
+      if (existingUser) {
+        return res.status(400).json({ error: 'Email already registered. Please sign in.' });
+      }
+    } catch (err) {
+      console.warn('getUser check warning:', err);
+    }
+
+    const passwordHash = hashPassword(password);
+    const user = await db.createUser(emailLower, passwordHash, fullName || emailLower.split('@')[0], mobileNumber || '', otpDeliveryPref || 'email');
+    const token = generateToken({ email: user.email, role: user.role });
+
+    try {
+      await db.logUserActivity(user.email, 'USER_REGISTER', `New account created for ${user.email}`, (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim());
+    } catch (err) {
+      console.warn('logUserActivity warning:', err);
+    }
+
+    res.status(201).json({ user, token });
+  } catch (err: any) {
+    console.error('Registration route exception:', err);
+    res.status(400).json({ error: err.message || 'Account registration failed. Please try again.' });
   }
-
-  // Clear pending OTP for this email
-  pendingOtps.delete(emailLower);
-
-  const existingUser = await db.getUser(emailLower);
-  if (existingUser) {
-    return res.status(400).json({ error: 'Email already registered. Please sign in.' });
-  }
-
-  const passwordHash = hashPassword(password);
-  const user = await db.createUser(emailLower, passwordHash, fullName || emailLower.split('@')[0], mobileNumber || '', otpDeliveryPref || 'email');
-  const token = generateToken({ email: user.email, role: user.role });
-
-  await db.logUserActivity(user.email, 'USER_REGISTER', `New account created for ${user.email}`, (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim());
-
-  res.status(201).json({ user, token });
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-  if (isRateLimited(ip, 'login', 10, 60 * 1000)) {
-    await db.logUserActivity(req.body.email || 'unknown', 'LOGIN_BLOCKED', 'Rate limit exceeded on login attempts', ip, 'warning');
-    return res.status(429).json({ error: 'Too many login attempts. Please wait.' });
+  try {
+    const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+    if (isRateLimited(ip, 'login', 10, 60 * 1000)) {
+      try {
+        await db.logUserActivity(req.body.email || 'unknown', 'LOGIN_BLOCKED', 'Rate limit exceeded on login attempts', ip, 'warning');
+      } catch {}
+      return res.status(429).json({ error: 'Too many login attempts. Please wait.' });
+    }
+
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const user = await db.getUser(email);
+    if (!user) {
+      try {
+        await db.logUserActivity(email, 'LOGIN_FAILED', 'Invalid user email attempted', ip, 'failed');
+      } catch {}
+      return res.status(400).json({ error: 'Invalid email or password' });
+    }
+
+    const userFromDb = (await db.getUser(email)) as any;
+    if (userFromDb.passwordHash !== hashPassword(password)) {
+      try {
+        await db.logUserActivity(email, 'LOGIN_FAILED', 'Incorrect password entered', ip, 'failed');
+      } catch {}
+      return res.status(400).json({ error: 'Invalid email or password' });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _, ...userWithoutHash } = userFromDb;
+    const token = generateToken({ email: userWithoutHash.email, role: userWithoutHash.role });
+
+    try {
+      await db.logUserActivity(userWithoutHash.email, 'USER_LOGIN', 'User authenticated session successfully', ip, 'success');
+    } catch {}
+
+    res.json({ user: userWithoutHash, token });
+  } catch (err: any) {
+    console.error('Login route exception:', err);
+    res.status(400).json({ error: err.message || 'Authentication error. Please try again.' });
   }
-
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
-
-  const user = await db.getUser(email);
-  if (!user) {
-    await db.logUserActivity(email, 'LOGIN_FAILED', 'Invalid user email attempted', ip, 'failed');
-    return res.status(400).json({ error: 'Invalid email or password' });
-  }
-
-  const userFromDb = (await db.getUser(email)) as any;
-  if (userFromDb.passwordHash !== hashPassword(password)) {
-    await db.logUserActivity(email, 'LOGIN_FAILED', 'Incorrect password entered', ip, 'failed');
-    return res.status(400).json({ error: 'Invalid email or password' });
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { passwordHash: _, ...userWithoutHash } = userFromDb;
-  const token = generateToken({ email: userWithoutHash.email, role: userWithoutHash.role });
-
-  await db.logUserActivity(userWithoutHash.email, 'USER_LOGIN', 'User authenticated session successfully', ip, 'success');
-
-  res.json({ user: userWithoutHash, token });
 });
 
 app.get('/api/auth/me', authenticate, (req: AuthenticatedRequest, res) => {

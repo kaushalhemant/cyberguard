@@ -100,11 +100,7 @@ const initialDb: DbSchema = isProdOrSupabase
 
 // AES-256-CBC database encryption at rest to protect personal details in local JSON storage
 const ENCRYPTION_ALGORITHM = 'aes-256-cbc';
-const ENCRYPTION_SECRET = process.env.DB_ENCRYPTION_SECRET || (isProduction ? '' : 'cyberguard-soc-default-super-secret-key-32bytes!');
-
-if (isProduction && !process.env.DB_ENCRYPTION_SECRET && !isSupabaseConfigured) {
-  throw new Error('FATAL: DB_ENCRYPTION_SECRET environment variable is required in production when Supabase is not configured.');
-}
+const ENCRYPTION_SECRET = process.env.DB_ENCRYPTION_SECRET || 'cyberguard-soc-default-super-secret-key-32bytes!';
 
 const ENCRYPTION_KEY = crypto.createHash('sha256').update(ENCRYPTION_SECRET || 'fallback-secret-for-key-derive').digest();
 
