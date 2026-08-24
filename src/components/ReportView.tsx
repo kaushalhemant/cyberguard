@@ -252,7 +252,7 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleDownloadPdf}
-            className="flex-1 sm:flex-none bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-500/10"
+            className="flex-1 sm:flex-none bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
           >
             <Download className="w-4 h-4" />
             Download PDF Report

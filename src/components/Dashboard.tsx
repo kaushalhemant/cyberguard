@@ -778,7 +778,7 @@ export default function Dashboard({
               onClick={() => { setActiveTab('email'); setError(null); setIsQuotaExceeded(false); }}
               className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'email'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20'
+                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -790,7 +790,7 @@ export default function Dashboard({
               onClick={() => { setActiveTab('link'); setError(null); setIsQuotaExceeded(false); }}
               className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'link'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20'
+                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -802,7 +802,7 @@ export default function Dashboard({
               onClick={() => { setActiveTab('image'); setError(null); setIsQuotaExceeded(false); }}
               className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'image'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20'
+                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -821,7 +821,7 @@ export default function Dashboard({
               }}
               className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'cve'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
+                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -834,7 +834,7 @@ export default function Dashboard({
               onClick={() => { setActiveTab('osint'); setError(null); setIsQuotaExceeded(false); }}
               className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'osint'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
+                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -846,7 +846,7 @@ export default function Dashboard({
               onClick={() => { setActiveTab('hash'); setError(null); setIsQuotaExceeded(false); }}
               className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'hash'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
+                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -858,7 +858,7 @@ export default function Dashboard({
               onClick={() => { setActiveTab('siem'); setError(null); setIsQuotaExceeded(false); }}
               className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'siem'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
+                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -870,7 +870,7 @@ export default function Dashboard({
               onClick={() => { setActiveTab('stix'); setError(null); setIsQuotaExceeded(false); }}
               className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'stix'
-                  ? 'border-cyan-500 text-cyan-400 bg-cyan-950/20 font-bold'
+                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -904,7 +904,7 @@ export default function Dashboard({
                         value={scanEmail}
                         onChange={(e) => setScanEmail(e.target.value)}
                         placeholder="Enter email to scan (e.g. security-officer@domain.com)..."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-all font-mono"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-all font-mono"
                         disabled={loading}
                         required
                       />
@@ -912,7 +912,7 @@ export default function Dashboard({
                     <button
                       type="submit"
                       disabled={loading}
-                      className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0 font-mono"
+                      className="bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0 font-mono"
                     >
                       {loading ? (
                         <>
@@ -943,7 +943,7 @@ export default function Dashboard({
                     value={scanUrl}
                     onChange={(e) => setScanUrl(e.target.value)}
                     placeholder="Enter full URL to scan (e.g. https://paypal-login-verify.xyz)..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-all font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-all font-mono"
                     disabled={loading}
                     required
                   />
@@ -951,7 +951,7 @@ export default function Dashboard({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0"
+                  className="bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0"
                 >
                   {loading ? (
                     <>
@@ -1025,7 +1025,7 @@ export default function Dashboard({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55"
+                  className="w-full bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55"
                 >
                   {loading ? (
                     <>
@@ -1540,14 +1540,14 @@ export default function Dashboard({
                     value={stixTarget}
                     onChange={(e) => setStixTarget(e.target.value)}
                     placeholder="Target IP address or domain..."
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-mono outline-none focus:border-cyan-500"
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-mono outline-none focus:border-sky-500"
                   />
                   <input
                     type="text"
                     value={stixHash}
                     onChange={(e) => setStixHash(e.target.value)}
                     placeholder="SHA-256 payload hash string..."
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-mono outline-none focus:border-cyan-500"
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-mono outline-none focus:border-sky-500"
                   />
                 </div>
                 <div className="flex gap-3">
@@ -1556,12 +1556,12 @@ export default function Dashboard({
                     value={stixNotes}
                     onChange={(e) => setStixNotes(e.target.value)}
                     placeholder="Official forensic evidence summary / chain of custody notes..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-sans outline-none focus:border-cyan-500"
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-sans outline-none focus:border-sky-500"
                   />
                   <button
                     type="submit"
                     disabled={stixLoading}
-                    className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    className="bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
                   >
                     {stixLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     <span>Generate STIX 2.1 Bundle</span>
