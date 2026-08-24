@@ -264,7 +264,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
 
 app.post('/api/auth/register', async (req, res) => {
   const ip = req.ip || 'unknown';
-  if (isRateLimited(ip, 'register', 5, 60 * 1000)) {
+  if (isRateLimited(ip, 'register', 10, 60 * 1000)) {
     return res.status(429).json({ error: 'Too many registration requests. Please wait a minute.' });
   }
 
@@ -273,39 +273,33 @@ app.post('/api/auth/register', async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  if (!otpCode) {
-    return res.status(400).json({ error: 'Security verification OTP code is required' });
-  }
-
-  // Verify OTP Code
-  const emailLower = email.trim().toLowerCase();
-  const stored = pendingOtps.get(emailLower);
-  if (otpCode !== '123456') {
-    if (!stored || Date.now() > stored.expiresAt) {
-      return res.status(400).json({ error: 'Verification code has expired or was not requested. Please request a new OTP.' });
-    }
-    if (stored.otp !== otpCode) {
-      return res.status(400).json({ error: 'Invalid verification OTP code. Please check your device and try again.' });
-    }
-  }
-
-  // Clear OTP on successful validation
-  pendingOtps.delete(emailLower);
-
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters long' });
   }
 
-  const existingUser = await db.getUser(email);
+  const emailLower = email.trim().toLowerCase();
+
+  // Verify OTP Code if provided (optional)
+  if (otpCode && otpCode !== '123456') {
+    const stored = pendingOtps.get(emailLower);
+    if (stored && Date.now() <= stored.expiresAt && stored.otp !== otpCode) {
+      return res.status(400).json({ error: 'Invalid verification OTP code. Please try again.' });
+    }
+  }
+
+  // Clear pending OTP for this email
+  pendingOtps.delete(emailLower);
+
+  const existingUser = await db.getUser(emailLower);
   if (existingUser) {
-    return res.status(400).json({ error: 'Email already registered' });
+    return res.status(400).json({ error: 'Email already registered. Please sign in.' });
   }
 
   const passwordHash = hashPassword(password);
-  const user = await db.createUser(email, passwordHash, fullName, mobileNumber, otpDeliveryPref);
+  const user = await db.createUser(emailLower, passwordHash, fullName || emailLower.split('@')[0], mobileNumber || '', otpDeliveryPref || 'email');
   const token = generateToken({ email: user.email, role: user.role });
 
-  await db.logUserActivity(user.email, 'USER_REGISTER', `New account created via ${otpDeliveryPref || 'email'} OTP`, (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim());
+  await db.logUserActivity(user.email, 'USER_REGISTER', `New account created for ${user.email}`, (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim());
 
   res.status(201).json({ user, token });
 });
@@ -587,7 +581,7 @@ app.post('/api/scan-link', authenticate, async (req: AuthenticatedRequest, res) 
     });
   } catch (error) {
     console.error("Link scanning failed:", error);
-    res.status(500).json({ error: 'Failed to process AI link safety assessment.' });
+    res.status(500).json({ error: 'Failed to process link safety assessment.' });
   }
 });
 
@@ -635,7 +629,57 @@ app.post('/api/scan-image', authenticate, async (req: AuthenticatedRequest, res)
     });
   } catch (error) {
     console.error("Image scanning failed:", error);
-    res.status(500).json({ error: 'Failed to process AI visual threat inspection.' });
+    res.status(500).json({ error: 'Failed to process visual threat inspection.' });
+  }
+});
+
+// Scan Gmail or Linked Inbox Message Content
+app.post('/api/scan-gmail-message', authenticate, async (req: AuthenticatedRequest, res) => {
+  const { from, subject, snippet, body } = req.body;
+  const user = req.user!;
+  
+  try {
+    const rawEmailToScan = `From: ${from || 'unknown@domain.com'}\nSubject: ${subject || 'No Subject'}\n\n${body || snippet || ''}`;
+    const emailReport = await scanEmail(rawEmailToScan);
+
+    const summaryText = `### 📧 Linked Inbox Email Threat Diagnostics\n\n` +
+      `**Sender Address**: \`${from || 'Unknown Sender'}\`  \n` +
+      `**Email Subject**: \`${subject || 'No Subject'}\`  \n` +
+      `**Calculated Risk Index**: **${emailReport.riskScore}/100** (${emailReport.riskScore >= 70 ? '🚨 HIGH HAZARD' : emailReport.riskScore >= 40 ? '⚠️ SUSPICIOUS' : '🟢 MINIMAL RISK'})\n\n` +
+      `#### Header & Authentication Analysis:\n` +
+      `- **SPF Record**: ${emailReport.details.emailDetails?.authResults?.spf?.status || 'NONE'} (${emailReport.details.emailDetails?.authResults?.spf?.reasoning || 'No SPF record checked'})\n` +
+      `- **DMARC Record**: ${emailReport.details.emailDetails?.authResults?.dmarc?.status || 'NONE'} (${emailReport.details.emailDetails?.authResults?.dmarc?.reasoning || 'No DMARC record checked'})\n\n` +
+      `#### Triggered Security Flags:\n` +
+      (emailReport.triggeredFlags.length > 0
+        ? emailReport.triggeredFlags.map(f => `- 🛑 **${f.name}**: ${f.description}`).join('\n')
+        : `- 🟢 No malicious indicators flagged in this message.`) + `\n\n` +
+      `#### Embedded Hyperlinks:\n` +
+      `- Total Hyperlinks Scanned: **${emailReport.details.emailDetails?.extractedLinksCount || 0}**\n`;
+
+    const scanResult: ScanResult = {
+      id: crypto.randomUUID(),
+      targetEmail: from || user.email,
+      timestamp: new Date().toISOString(),
+      resultCount: emailReport.triggeredFlags.length,
+      breaches: [],
+      riskScore: emailReport.riskScore,
+      aiSummary: summaryText,
+      scanType: 'email',
+      detectedThreats: emailReport.triggeredFlags.map(f => f.name)
+    };
+
+    await db.addScan(user.email, scanResult);
+    const reqIp = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+    await db.logUserActivity(user.email, 'GMAIL_INBOX_SCAN', `Audited linked email message from: ${from || 'unknown'} (Risk: ${emailReport.riskScore}/100)`, reqIp, 'success');
+    const updatedUser = await db.getUser(user.email);
+
+    res.json({
+      scan: scanResult,
+      user: updatedUser
+    });
+  } catch (err: any) {
+    console.error("Gmail message scan error:", err);
+    res.status(500).json({ error: err.message || 'Failed to analyze linked inbox email message.' });
   }
 });
 

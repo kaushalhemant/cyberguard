@@ -59,10 +59,10 @@ const LOCAL_THREAT_INTEL: ThreatIntelligenceReport = {
   phishingTactics: [
     {
       id: "tactic-cg-001",
-      name: "Executive Deepfake & Voice-Synthesis Phishing",
+      name: "Executive Impersonation & Audio Spoofing",
       trendLevel: "surging",
       targetAudience: "Finance Managers and Personnel",
-      description: "Threat actors use cloned audio synthesis models trained on public corporate videos to clone senior executive voices, instructing employees to authorize emergency wire transfers.",
+      description: "Threat actors use spoofed communications to clone senior executive identities, instructing employees to authorize emergency wire transfers.",
       redFlags: [
         "Unusual requests bypassing standard multi-tier financial approvals",
         "High degree of fabricated urgency over non-traditional communication platforms",
@@ -250,3 +250,4 @@ export async function generateThreatIntelligenceReport(): Promise<ThreatIntellig
     lastUpdated: new Date().toISOString()
   };
 }
+

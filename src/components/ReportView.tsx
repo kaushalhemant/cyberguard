@@ -94,7 +94,7 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
 
     y += 28;
 
-    // AI summary section
+    // Heuristic summary section
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
@@ -106,7 +106,7 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
     doc.setTextColor(50, 50, 50);
     
     // Split text into line-wrapped array for standard page width
-    const summaryLines = doc.splitTextToSize(scan.aiSummary || 'No AI Diagnostics summary compiled.', 180);
+    const summaryLines = doc.splitTextToSize(scan.aiSummary || 'Security assessment completed cleanly.', 180);
     doc.text(summaryLines, 15, y);
     y += (summaryLines.length * 5) + 8;
 
@@ -341,7 +341,7 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
               <span>CyberGuard Executive Threat Summary</span>
             </div>
             <div className="text-xs text-slate-300 leading-relaxed space-y-2 whitespace-pre-wrap font-sans print:text-black">
-              {scan.aiSummary || 'AI report generator is performing secure cloud-neural diagnostics...'}
+              {scan.aiSummary || 'Threat summary compiled.'}
             </div>
           </div>
         </div>

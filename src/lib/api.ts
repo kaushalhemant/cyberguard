@@ -7,8 +7,15 @@ export async function safeJsonResponse<T = any>(response: Response, defaultError
 
   if (contentType.includes('application/json')) {
     try {
-      return await response.json();
-    } catch {
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || data?.message || defaultError || `Server error (${response.status})`);
+      }
+      return data;
+    } catch (err: any) {
+      if (err.message && !err.message.includes('JSON')) {
+        throw err;
+      }
       throw new Error(defaultError || 'Failed to parse JSON response from server.');
     }
   }
@@ -18,7 +25,7 @@ export async function safeJsonResponse<T = any>(response: Response, defaultError
   const cleanSnippet = text.replace(/<[^>]*>/g, '').trim().substring(0, 120);
 
   if (!response.ok) {
-    throw new Error(defaultError || `Server error (${response.status}): ${cleanSnippet || response.statusText}`);
+    throw new Error(defaultError ? `${defaultError} (${response.status}: ${cleanSnippet || response.statusText})` : `Server error (${response.status}): ${cleanSnippet || response.statusText}`);
   }
 
   throw new Error(defaultError || `Server returned non-JSON response (${response.status}): ${cleanSnippet || 'Unexpected content'}`);

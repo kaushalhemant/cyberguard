@@ -11,31 +11,31 @@
   --slate-700: #334155;
   --slate-800: #1e293b;
   --slate-850: #0f172a;
-  --slate-900: #090d16;
-  --slate-950: #030712;
+  --slate-900: #0d1526;
+  --slate-950: #080d1a;
 }
 
 .theme-midnight {
   --slate-50: #fafafd;
-  --slate-100: #f1f1f8;
-  --slate-200: #e4e4f0;
-  --slate-300: #d4d4e2;
-  --slate-400: #a3a3b8;
-  --slate-500: #737385;
-  --slate-600: #525263;
-  --slate-700: #3c3c4a;
-  --slate-800: #191624;
-  --slate-850: #100e1a;
-  --slate-900: #090710;
-  --slate-950: #020106;
+  --slate-100: #f1f3f9;
+  --slate-200: #e2e7f3;
+  --slate-300: #cbd5e6;
+  --slate-400: #94a3c2;
+  --slate-500: #647496;
+  --slate-600: #475578;
+  --slate-700: #334160;
+  --slate-800: #1b2640;
+  --slate-850: #111a2e;
+  --slate-900: #0a1120;
+  --slate-950: #050812;
 }
 
 @theme {
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --color-brand-500: #06b6d4;
-  --color-brand-400: #22d3ee;
+  --color-brand-500: #0284c7;
+  --color-brand-400: #38bdf8;
 
   --color-slate-50: var(--slate-50);
   --color-slate-100: var(--slate-100);
@@ -51,40 +51,40 @@
   --color-slate-950: var(--slate-950);
 }
 
-/* Custom Premium Bento & Glass Cards */
+/* Cool & Calm Glassmorphic Bento Cards */
 .bento-card {
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 1.25rem;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
 .bento-card:hover {
-  border-color: rgba(6, 182, 212, 0.4);
-  box-shadow: 0 10px 35px -5px rgba(6, 182, 212, 0.15), 0 0 1px rgba(255, 255, 255, 0.2);
+  border-color: rgba(56, 189, 248, 0.3);
+  box-shadow: 0 8px 30px -5px rgba(2, 132, 199, 0.12), 0 0 1px rgba(255, 255, 255, 0.15);
   transform: translateY(-1px);
 }
 
 .glass-card {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .glass-header {
-  background: rgba(3, 7, 18, 0.85);
+  background: rgba(8, 13, 26, 0.88);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 }
 
-/* Status Tags */
+/* Calm Status Tags */
 .status-tag {
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 9999px;
   font-size: 10px;
   font-weight: 700;
@@ -99,7 +99,7 @@
   background: rgba(16, 185, 129, 0.12);
   color: #34d399;
   border: 1px solid rgba(16, 185, 129, 0.25);
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.1);
 }
 
 .status-soon {
@@ -109,23 +109,23 @@
 }
 
 .scan-line {
-  border-left: 3px solid #06b6d4;
+  border-left: 3px solid #0284c7;
   padding-left: 14px;
 }
 
-/* Big Tech Action Gradient Buttons */
+/* Cool Calm Action Buttons */
 .btn-primary {
-  background: linear-gradient(135deg, #06b6d4 0%, #2563eb 100%);
+  background: linear-gradient(135deg, #0284c7 0%, #0f766e 100%);
   color: #ffffff;
   font-weight: 600;
   border-radius: 0.85rem;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.25);
+  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.2);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%);
-  box-shadow: 0 6px 25px rgba(6, 182, 212, 0.4);
+  background: linear-gradient(135deg, #0369a1 0%, #115e59 100%);
+  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.3);
   transform: translateY(-1px);
 }
 
@@ -147,3 +147,4 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--slate-700);
 }
+

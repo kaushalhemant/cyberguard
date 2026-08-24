@@ -102,12 +102,12 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center font-sans">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-cyan-950/60 border border-cyan-500/40 flex items-center justify-center text-cyan-400 animate-pulse shadow-[0_0_25px_rgba(6,182,212,0.3)]">
+          <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-sky-500/30 flex items-center justify-center text-sky-400 shadow-md">
             <ShieldCheck className="w-7 h-7" />
           </div>
           <div className="text-center space-y-1">
-            <h2 className="text-lg font-bold font-display text-white tracking-wide">CyberGuard Neural Operations</h2>
-            <p className="text-xs font-mono text-cyan-400">Verifying session token & database connection...</p>
+            <h2 className="text-lg font-bold font-display text-white tracking-wide">CyberGuard Security Command</h2>
+            <p className="text-xs font-mono text-sky-400">Verifying session token & database connection...</p>
           </div>
         </div>
       </div>

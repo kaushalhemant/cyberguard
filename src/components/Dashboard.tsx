@@ -75,20 +75,6 @@ export default function Dashboard({
   const [error, setError] = useState<string | null>(null);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
 
-  // --- NEW AI ADVANCED STATES ---
-  // Search Grounding States
-  const [groundingQuery, setGroundingQuery] = useState('');
-  const [groundingResult, setGroundingResult] = useState<{ text: string; sources: { title: string; url: string }[] } | null>(null);
-  const [groundingLoading, setGroundingLoading] = useState(false);
-
-  // CyberGuard Assistant Chat States
-  const [intelMessage, setIntelMessage] = useState('');
-  const [intelTaskType, setIntelTaskType] = useState<'complex' | 'general' | 'fast'>('general');
-  const [intelChatHistory, setIntelChatHistory] = useState<{ sender: 'user' | 'assistant'; text: string; timestamp: string }[]>([
-    { sender: 'assistant', text: 'Greetings! I am CyberGuard Assistant, your personal AI security helper. How can I help protect your digital accounts, analyze potential threat vectors, or answer your cybersecurity questions today?', timestamp: new Date().toLocaleTimeString() }
-  ]);
-  const [intelLoading, setIntelLoading] = useState(false);
-
   // Gmail Live Inbox Integration states
   const [gmailMode, setGmailMode] = useState<'breach' | 'gmail'>('breach');
   const [gmailMessages, setGmailMessages] = useState<any[]>([]);
@@ -442,66 +428,7 @@ export default function Dashboard({
 
 
 
-  const handleGroundingSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!groundingQuery.trim()) return;
 
-    setGroundingLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/ai/search-grounding', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ query: groundingQuery.trim() })
-      });
-      const data = await safeJsonResponse(response, 'Failed to perform grounded web search.');
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to perform grounded web search.');
-      }
-      setGroundingResult({
-        text: data.text,
-        sources: data.sources || []
-      });
-    } catch (err: any) {
-      setError(err.message || 'Error occurred during grounded security search.');
-    } finally {
-      setGroundingLoading(false);
-    }
-  };
-
-  const handleIntelSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!intelMessage.trim() || intelLoading) return;
-
-    const userMsg = intelMessage.trim();
-    setIntelMessage('');
-    setIntelChatHistory(prev => [...prev, { sender: 'user', text: userMsg, timestamp: new Date().toLocaleTimeString() }]);
-    setIntelLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/ai/intelligence', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ message: userMsg, taskType: intelTaskType })
-      });
-      const data = await safeJsonResponse(response, 'Failed to process intelligence request.');
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process intelligence request.');
-      }
-      setIntelChatHistory(prev => [...prev, { sender: 'assistant', text: data.response, timestamp: new Date().toLocaleTimeString() }]);
-    } catch (err: any) {
-      setIntelChatHistory(prev => [...prev, { sender: 'assistant', text: `⚠️ Error: ${err.message || 'Unable to retrieve advice.'}`, timestamp: new Date().toLocaleTimeString() }]);
-    } finally {
-      setIntelLoading(false);
-    }
-  };
 
 
 
@@ -1103,7 +1030,7 @@ export default function Dashboard({
                   {loading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Inspecting visual elements with CyberGuard Visual AI...</span>
+                      <span>Inspecting visual threat vectors & heuristics...</span>
                     </>
                   ) : (
                     <>
@@ -1675,7 +1602,7 @@ export default function Dashboard({
               <span>💡 Tip: Test <span className="text-emerald-400 select-all font-semibold">secure@cyberguard.com</span> to experience a clean 0-breach status.</span>
             )}
             {activeTab === 'link' && (
-              <span>💡 Tip: Try a mock URL like <span className="text-cyan-400 select-all font-semibold">http://paypal-security-update.xyz</span> to test AI-driven link diagnostics.</span>
+              <span>💡 Tip: Try a mock URL like <span className="text-sky-400 select-all font-semibold">http://paypal-security-update.xyz</span> to test link threat diagnostics.</span>
             )}
             {activeTab === 'image' && (
               <span>💡 Tip: Select any image file to inspect fraud indicators, suspicious QR targets, or tech support scam layouts.</span>
