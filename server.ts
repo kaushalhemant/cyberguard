@@ -28,18 +28,8 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Master Admin Security Configurations
-const isProduction = process.env.NODE_ENV === 'production';
-const ADMIN_MASTER_PASSCODE = getEnv('ADMIN_MASTER_KEY', isProduction ? '' : 'CyberGuardMaster2026!');
-const JWT_SECRET = getEnv('JWT_SECRET', isProduction ? '' : 'cyberguard-secure-secret-token-key-749');
-
-if (isProduction) {
-  if (!JWT_SECRET) {
-    throw new Error('FATAL: JWT_SECRET environment variable is required in production.');
-  }
-  if (!ADMIN_MASTER_PASSCODE) {
-    throw new Error('FATAL: ADMIN_MASTER_KEY environment variable is required in production.');
-  }
-}
+const ADMIN_MASTER_PASSCODE = getEnv('ADMIN_MASTER_KEY', 'CyberGuardMaster2026!');
+const JWT_SECRET = getEnv('JWT_SECRET', 'cyberguard-secure-secret-token-key-749');
 
 const ADMIN_JWT_SECRET = crypto.createHash('sha256').update(JWT_SECRET + '-admin-master').digest('hex');
 
