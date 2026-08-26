@@ -8,7 +8,6 @@ import {
 import { User, ScanResult, OsintResult, HashAnalysisResult, SocIncident, CveRecord } from '../types';
 import Terminal from './Terminal';
 import PrivacyStatementModal from './PrivacyStatementModal';
-import ThreatIntelligence from './ThreatIntelligence';
 import UsageAudit from './UsageAudit';
 import { safeJsonResponse } from '../lib/api';
 
@@ -1203,12 +1202,9 @@ export default function Dashboard({
 
         </div>
 
-        {/* RIGHT COLUMN: GLOBAL THREAT RADAR & TRUST COMPLIANCE (3 cols) */}
+        {/* RIGHT COLUMN: TRUST COMPLIANCE (3 cols) */}
         <div className="lg:col-span-3 space-y-4">
           
-          {/* Global Threat Intelligence Side Panel */}
-          <ThreatIntelligence token={token} />
-
           {/* Trust, Privacy & Compliance Center */}
           <div className="soc-panel p-4 space-y-3">
             <div className="border-b border-[#263147] pb-2">

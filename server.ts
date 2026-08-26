@@ -358,16 +358,6 @@ app.post('/api/auth/firebase-sync', async (req, res) => {
   res.json({ user, token });
 });
 
-// Global Threat Intelligence Route
-app.get(['/api/threat-intelligence', '/api/ai/threat-intelligence'], authenticate, async (req: AuthenticatedRequest, res) => {
-  try {
-    const report = await generateThreatIntelligenceReport();
-    res.json(report);
-  } catch (err: any) {
-    console.error("Threat Intelligence route error:", err);
-    res.status(500).json({ error: 'Failed to generate threat intelligence report.' });
-  }
-});
 
 // NIST NVD CVE Vulnerability Database Routes
 app.get('/api/cve/search', authenticate, async (req: AuthenticatedRequest, res) => {
