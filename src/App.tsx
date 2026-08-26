@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ChevronLeft, Sun, Moon } from 'lucide-react';
+import { ShieldCheck, ChevronLeft, Sun, Moon, Terminal, Activity, Database } from 'lucide-react';
 import { User, ScanResult } from './types';
 import Dashboard from './components/Dashboard';
 import ReportView from './components/ReportView';
@@ -34,48 +34,63 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-sky-500/20 selection:text-white">
+    <div className={`min-h-screen bg-[#090D14] text-[#ECEFF4] flex flex-col font-sans ${theme === 'midnight' ? 'theme-midnight' : ''}`}>
       
-      {/* GLOBAL APPLICATION HEADER */}
-      <header className="sticky top-0 z-40 glass-header px-6 py-3.5 flex items-center justify-between print:hidden border-b border-slate-800 shadow-md">
+      {/* TACTICAL COMMAND HEADER (1px solid grid lines, 0 blur) */}
+      <header className="sticky top-0 z-40 bg-[#111622] border-b border-[#263147] px-4 py-2 flex items-center justify-between print:hidden">
         <div 
           onClick={() => setActiveView('dashboard')}
-          className="flex items-center gap-3 cursor-pointer group"
+          className="flex items-center gap-3 cursor-pointer select-none"
         >
-          <div className="w-10 h-10 bg-slate-900 border border-sky-500/30 rounded-xl flex items-center justify-center text-sky-400 group-hover:border-sky-400 transition-all shadow-sm">
-            <ShieldCheck className="w-6 h-6 text-sky-400" />
+          <div className="w-8 h-8 bg-[#181F2E] border border-[#263147] rounded-sm flex items-center justify-center text-[#00E5FF]">
+            <ShieldCheck className="w-5 h-5 text-[#00E5FF]" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold tracking-tight font-display text-white flex items-center gap-1.5">
-                CyberGuard
+              <h1 className="text-sm font-bold tracking-wider font-display uppercase text-white flex items-center gap-1.5">
+                CYBERGUARD <span className="text-[#00E5FF] font-mono text-xs font-normal">// SIEM WORKSTATION</span>
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[9px] font-mono font-bold bg-sky-500/10 text-sky-300 border border-sky-500/30 tracking-wider">
-                VERIFIED SECURITY HUB
+              <span className="px-1.5 py-0.5 rounded-sm text-[9px] font-mono font-bold bg-[#181F2E] text-[#00E5FF] border border-[#263147]">
+                v4.2.0-PROD
               </span>
             </div>
-            <span className="text-[10px] font-mono tracking-wider text-slate-400 block -mt-0.5">
-              Rule-Based Threat Diagnostics & NIST CVE Forensic Engine
+            <span className="text-[10px] font-mono tracking-wide text-[#7E8B9B] block -mt-0.5">
+              Threat Intelligence & Forensics Operations Console
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Theme Toggle Button */}
+        {/* Telemetry Status Bar & Utility Actions */}
+        <div className="flex items-center gap-3 font-mono text-[10px]">
+          <div className="hidden md:flex items-center gap-3 border-r border-[#263147] pr-3 text-[#7E8B9B]">
+            <span className="flex items-center gap-1">
+              <Activity className="w-3 h-3 text-[#00E676]" />
+              ENGINE: <strong className="text-[#ECEFF4]">ACTIVE</strong>
+            </span>
+            <span className="flex items-center gap-1">
+              <Database className="w-3 h-3 text-[#00E5FF]" />
+              CVE DB: <strong className="text-[#ECEFF4]">NVD v2.0</strong>
+            </span>
+            <span className="flex items-center gap-1">
+              <Terminal className="w-3 h-3 text-[#FF9900]" />
+              STIX 2.1: <strong className="text-[#ECEFF4]">READY</strong>
+            </span>
+          </div>
+
           <button
             onClick={toggleTheme}
-            className="text-slate-300 hover:text-white transition-all font-mono text-[10px] font-bold flex items-center gap-2 bg-slate-900/80 border border-slate-800 hover:border-sky-500/40 px-3 py-1.5 rounded-xl cursor-pointer shadow-sm"
-            title={theme === 'slate' ? 'Switch to High-Contrast Midnight Theme' : 'Switch to Slate Theme'}
+            className="btn-soc px-2.5 py-1 flex items-center gap-1.5 text-[10px]"
+            title="Toggle contrast visual density"
           >
             {theme === 'slate' ? (
               <>
-                <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">MIDNIGHT</span>
+                <Moon className="w-3 h-3 text-[#00E5FF]" />
+                <span>MIDNIGHT</span>
               </>
             ) : (
               <>
-                <Sun className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">DARK SLATE</span>
+                <Sun className="w-3 h-3 text-[#FF9900]" />
+                <span>DARK SLATE</span>
               </>
             )}
           </button>
@@ -83,27 +98,17 @@ export default function App() {
           {activeView !== 'dashboard' && (
             <button
               onClick={() => setActiveView('dashboard')}
-              className="text-xs text-slate-300 hover:text-white transition-all font-mono font-semibold flex items-center gap-1.5 bg-slate-900 border border-slate-800 hover:border-sky-500/40 px-3 py-1.5 rounded-xl cursor-pointer"
+              className="btn-soc px-2.5 py-1 flex items-center gap-1.5 text-[10px]"
             >
-              <ChevronLeft className="w-4 h-4 text-sky-400" />
-              DASHBOARD
+              <ChevronLeft className="w-3.5 h-3.5 text-[#00E5FF]" />
+              <span>RETURN TO WORKSTATION</span>
             </button>
           )}
-
-          <div className="bg-slate-900/80 border border-emerald-500/30 px-3 py-1.5 rounded-xl flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-[10px] uppercase font-mono text-emerald-400 font-bold hidden sm:inline">ENGINE ACTIVE</span>
-          </div>
         </div>
       </header>
 
-      {/* MASTER CENTRAL CANVAS CONTAINER */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 md:px-6 relative z-10 print:p-0">
-        
-        {/* Background ambient lighting */}
-        <div className="absolute top-1/4 left-1/10 w-96 h-96 bg-sky-500/5 rounded-full blur-3xl pointer-events-none print:hidden"></div>
-        <div className="absolute bottom-1/4 right-1/10 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none print:hidden"></div>
-
+      {/* MASTER HIGH-DENSITY CANVAS */}
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-3 py-4 print:p-0">
         {activeView === 'dashboard' && (
           <Dashboard
             user={user}
@@ -121,13 +126,14 @@ export default function App() {
             onBack={() => setActiveView('dashboard')}
           />
         )}
-
       </main>
 
-      {/* FOOTER AREA */}
-      <footer className="border-t border-slate-900 py-5 text-center text-[11px] font-mono text-slate-500 print:hidden mt-12 bg-slate-950">
-        <p>© 2026 CyberGuard Official Command. Powered by Rule-Based Cyber Forensic Engine.</p>
-        <p className="mt-1 text-slate-600">Deterministic Threat Inspection • NIST NVD v2.0 Live Query Feed • STIX 2.1 Evidence Bundling.</p>
+      {/* COMPACT COMMAND FOOTER */}
+      <footer className="border-t border-[#263147] py-2.5 px-4 text-center text-[10px] font-mono text-[#7E8B9B] bg-[#111622] print:hidden">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 max-w-[1600px] mx-auto">
+          <span>CYBERGUARD COMMAND INFRASTRUCTURE • STRICT ZERO-RETENTION FORENSIC PROTOCOL</span>
+          <span>NVD v2.0 FEED • STIX 2.1 EVIDENCE ENGINE • SHA-256 SESSION INTEGRITY</span>
+        </div>
       </footer>
 
     </div>

@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, ShieldAlert, ShieldCheck, Mail, Search, History, LogOut, Terminal as TerminalIcon, Bot, Zap, Brain, Plus, ChevronRight, Lock, Bell, Users, Cpu, FileText, CheckCircle2, UserCheck, RefreshCw, Link2, Image, UploadCloud, Globe, Eye, FileImage, Trash2, Server, Activity, FileCode, AlertTriangle, Download, Database, Key, CheckSquare, Layers } from 'lucide-react';
+import { 
+  Shield, ShieldAlert, ShieldCheck, Mail, Search, History, Terminal as TerminalIcon, 
+  Zap, Lock, Bell, Users, Cpu, FileText, CheckCircle2, RefreshCw, Link2, 
+  UploadCloud, Globe, Eye, Trash2, Server, Activity, FileCode, AlertTriangle, 
+  Download, Database, Key, Layers, Crosshair, Code, Filter, Check, X, ChevronRight 
+} from 'lucide-react';
 import { User, ScanResult, OsintResult, HashAnalysisResult, SocIncident, CveRecord } from '../types';
 import Terminal from './Terminal';
 import PrivacyStatementModal from './PrivacyStatementModal';
@@ -25,6 +30,7 @@ export default function Dashboard({
   onUserUpdate
 }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<'email' | 'link' | 'image' | 'cve' | 'osint' | 'hash' | 'siem' | 'stix'>('email');
+  const [rawViewMode, setRawViewMode] = useState<boolean>(false);
   const [scanEmail, setScanEmail] = useState('');
   const [scanUrl, setScanUrl] = useState('');
 
@@ -34,7 +40,6 @@ export default function Dashboard({
   const [cveLoading, setCveLoading] = useState(false);
   const [cveResults, setCveResults] = useState<{ totalMatches: number; cves: CveRecord[] } | null>(null);
 
-  // --- CYBERSECURITY OFFICIAL (SOC) STATES ---
   // OSINT IP & Domain Inspector States
   const [osintTarget, setOsintTarget] = useState('');
   const [osintLoading, setOsintLoading] = useState(false);
@@ -61,7 +66,6 @@ export default function Dashboard({
   const [stixBundleResult, setStixBundleResult] = useState<any | null>(null);
   const [stixLoading, setStixLoading] = useState(false);
 
-  
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -69,7 +73,6 @@ export default function Dashboard({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
 
   // Gmail Live Inbox Integration states
   const [gmailMode, setGmailMode] = useState<'breach' | 'gmail'>('breach');
@@ -78,1781 +81,1256 @@ export default function Dashboard({
   const [gmailError, setGmailError] = useState<string | null>(null);
   const [activeScanningId, setActiveScanningId] = useState<string | null>(null);
 
-  const fetchGmailEmails = async (tokenToUse: string) => {
-    setGmailLoading(true);
-    setGmailError(null);
-    try {
-      const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=category:primary', {
-        headers: {
-          'Authorization': `Bearer ${tokenToUse}`
-        }
-      });
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          setGmailToken(null);
-          throw new Error('Your Google session has expired. Please re-connect.');
-        }
-        throw new Error('Failed to retrieve your Gmail message list.');
-      }
-      
-      const listData = await response.json();
-      if (!listData.messages || listData.messages.length === 0) {
-        setGmailMessages([]);
-        return;
-      }
-      
-      const details = await Promise.all(listData.messages.map(async (msg: any) => {
-        try {
-          const detailResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`, {
-            headers: {
-              'Authorization': `Bearer ${tokenToUse}`
-            }
-          });
-          if (!detailResponse.ok) return null;
-          return await detailResponse.json();
-        } catch (e) {
-          return null;
-        }
-      }));
-      
-      const parsed = details.filter(Boolean).map((message: any) => {
-        const headers = message.payload?.headers || [];
-        const getHeader = (name: string) => headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
-        
-        const fromHeader = getHeader('from');
-        const subjectHeader = getHeader('subject');
-        const dateHeader = getHeader('date');
-        
-        const decodeBase64Url = (str: string) => {
-          if (!str) return '';
-          try {
-            const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-            return decodeURIComponent(escape(window.atob(base64)));
-          } catch (e) {
-            return '';
-          }
-        };
-        
-        let body = '';
-        const parts = message.payload?.parts;
-        
-        if (message.payload?.body?.data) {
-          body = decodeBase64Url(message.payload.body.data);
-        } else if (parts) {
-          const findTextPart = (partsArray: any[]): string => {
-            for (const part of partsArray) {
-              if (part.mimeType === 'text/plain' && part.body?.data) {
-                return decodeBase64Url(part.body.data);
-              } else if (part.mimeType === 'text/html' && part.body?.data) {
-                return decodeBase64Url(part.body.data);
-              } else if (part.parts) {
-                const subText = findTextPart(part.parts);
-                if (subText) return subText;
-              }
-            }
-            return '';
-          };
-          body = findTextPart(parts);
-        }
-        
-        return {
-          id: message.id,
-          from: fromHeader,
-          subject: subjectHeader,
-          date: dateHeader,
-          snippet: message.snippet || '',
-          body: body || message.snippet || '',
-        };
-      });
-      
-      setGmailMessages(parsed);
-    } catch (err: any) {
-      console.error('Gmail retrieval failed:', err);
-      setGmailError(err.message || 'Failed to sync your Gmail messages.');
-    } finally {
-      setGmailLoading(false);
-    }
-  };
-
-  const handleConnectGmail = async () => {
-    setGmailError('Gmail integration requires entering a valid OAuth token directly or connecting via your Google Account.');
-  };
-
-  const handleScanGmailMessage = async (msg: any) => {
-    setError(null);
-    setIsQuotaExceeded(false);
-    setActiveScanningId(msg.id);
-    
-    try {
-      const response = await fetch('/api/scan-gmail-message', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          from: msg.from,
-          subject: msg.subject,
-          snippet: msg.snippet,
-          body: msg.body
-        })
-      });
-
-      let data: any = {};
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        if (response.status === 402 || response.status === 403) {
-          setIsQuotaExceeded(true);
-          return;
-        }
-        throw new Error('Server returned unexpected non-JSON response.');
-      }
-
-      if (!response.ok) {
-        if (data.code === 'QUOTA_EXCEEDED' || response.status === 402 || response.status === 403) {
-          setIsQuotaExceeded(true);
-          return;
-        }
-        throw new Error(data.error || 'Failed to scan the Gmail message.');
-      }
-
-      setScans(prev => [data.scan, ...prev]);
-      onUserUpdate(data.user);
-      onSelectReport(data.scan);
-    } catch (err: any) {
-      console.error('Scan Gmail Message error:', err);
-      const msgLower = (err.message || '').toLowerCase();
-      if (msgLower.includes('quota') || msgLower.includes('limit')) {
-        setIsQuotaExceeded(true);
-      } else {
-        setError(err.message || 'Error executing Gmail message threat scan.');
-      }
-    } finally {
-      setActiveScanningId(null);
-    }
-  };
-
-  useEffect(() => {
-    if (gmailToken && gmailMode === 'gmail') {
-      fetchGmailEmails(gmailToken);
-    }
-  }, [gmailToken, gmailMode]);
-
+  // General State
   const [scans, setScans] = useState<ScanResult[]>([]);
+  const [currentScan, setCurrentScan] = useState<ScanResult | null>(null);
   const [showTerminal, setShowTerminal] = useState(false);
 
-  // --- COMPLIANCE, TRUST & DATA SUBJECT ERASURE STATES ---
+  // Trust & Privacy States
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [complianceTab, setComplianceTab] = useState<'gmail' | 'sourcing' | 'soc2' | 'bounty' | 'erasure'>('gmail');
+  const [confirmWipe, setConfirmWipe] = useState(false);
   const [isClearingScans, setIsClearingScans] = useState(false);
   const [clearScansSuccess, setClearScansSuccess] = useState(false);
-  const [confirmWipe, setConfirmWipe] = useState(false);
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
-  const handleWipeScans = async () => {
-    setIsClearingScans(true);
-    setClearScansSuccess(false);
-    try {
-      const response = await fetch('/api/scans/clear', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (response.ok) {
-        setScans([]);
-        setClearScansSuccess(true);
-        setConfirmWipe(false);
-        setTimeout(() => setClearScansSuccess(false), 5000);
-      }
-    } catch (err) {
-      console.error("Wipe scans error:", err);
-    } finally {
-      setIsClearingScans(false);
-    }
-  };
-
-  const fetchScansHistory = async () => {
+  // Load Scan History & Data on Mount
+  const loadHistory = async () => {
     try {
       const response = await fetch('/api/scans', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (response.ok) {
-        const data = await safeJsonResponse(response);
-        setScans(data.scans);
-      }
-    } catch (err) {
-      console.error('Failed to load history:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchScansHistory();
-  }, [token]);
-
-  // --- CYBERSECURITY OFFICIAL (SOC) HANDLERS ---
-  const handleOsintSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!osintTarget.trim()) return;
-    setOsintLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/soc/osint-lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ target: osintTarget.trim() })
-      });
-      const data = await safeJsonResponse(response, 'Failed to perform OSINT lookup.');
-      if (!response.ok) throw new Error(data.error || 'OSINT resolution failed.');
-      setOsintResult(data);
-    } catch (err: any) {
-      setError(err.message || 'Error executing OSINT forensic inspection.');
-    } finally {
-      setOsintLoading(false);
-    }
-  };
-
-  const handleHashSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!hashInput.trim()) return;
-    setHashLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/soc/hash-lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ hash: hashInput.trim(), fileName: hashFileName.trim() })
-      });
-      const data = await safeJsonResponse(response, 'Failed to perform hash forensics.');
-      if (!response.ok) throw new Error(data.error || 'Hash forensics analysis failed.');
-      setHashResult(data);
-    } catch (err: any) {
-      setError(err.message || 'Error executing hash forensics lookup.');
-    } finally {
-      setHashLoading(false);
-    }
-  };
-
-  const fetchSocIncidents = async () => {
-    setIncidentsLoading(true);
-    try {
-      const response = await fetch('/api/soc/incidents', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await safeJsonResponse(response);
-        setIncidentsList(data.incidents || []);
-        if (data.incidents?.length > 0 && !selectedIncident) {
-          setSelectedIncident(data.incidents[0]);
+        if (data?.scans) {
+          setScans(data.scans);
+          if (data.scans.length > 0) {
+            setCurrentScan(data.scans[0]);
+          }
         }
       }
     } catch (err) {
-      console.error('Failed to fetch SOC incidents:', err);
-    } finally {
-      setIncidentsLoading(false);
+      console.warn('Failed to load scan history:', err);
     }
   };
 
-  const handleTriageSubmit = async (incidentId: string) => {
-    try {
-      const response = await fetch(`/api/soc/incidents/${incidentId}/triage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ status: triageStatus, note: triageNote, containmentAction: containmentActionInput })
-      });
-      if (response.ok) {
-        const data = await safeJsonResponse(response);
-        setSelectedIncident(data.incident);
-        setIncidentsList(prev => prev.map(inc => inc.id === incidentId ? data.incident : inc));
-        setTriageNote('');
-        setContainmentActionInput('');
-      }
-    } catch (err) {
-      console.error('Triage update failed:', err);
-    }
-  };
-
-  const handleStixExportSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setStixLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/soc/stix-export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ target: stixTarget, hash: stixHash, notes: stixNotes })
-      });
-      const data = await safeJsonResponse(response, 'Failed to export STIX evidence bundle.');
-      if (!response.ok) throw new Error(data.error || 'STIX bundle export failed.');
-      setStixBundleResult(data.stixBundle);
-    } catch (err: any) {
-      setError(err.message || 'Error generating STIX evidence export.');
-    } finally {
-      setStixLoading(false);
-    }
-  };
-
-  const handleCveSearch = async (e?: React.FormEvent, customSeverity?: string) => {
-    if (e) e.preventDefault();
+  const loadLatestCves = async () => {
     setCveLoading(true);
-    setError(null);
-    const sevToUse = customSeverity !== undefined ? customSeverity : cveSeverity;
     try {
-      const response = await fetch(`/api/cve/search?query=${encodeURIComponent(cveQuery)}&severity=${sevToUse}&limit=25`, {
+      const res = await fetch('/api/cve/latest?limit=12', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await safeJsonResponse(response, 'Failed to query NIST CVE vulnerability database.');
-      setCveResults(data);
-    } catch (err: any) {
-      setError(err.message || 'Error querying CVE vulnerability database.');
+      if (res.ok) {
+        const data = await safeJsonResponse(res);
+        if (data?.cves) {
+          setCveResults({ totalMatches: data.cves.length, cves: data.cves });
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load CVE feed:', err);
     } finally {
       setCveLoading(false);
     }
   };
 
+  const fetchIncidents = async () => {
+    setIncidentsLoading(true);
+    try {
+      const res = await fetch('/api/soc/incidents', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await safeJsonResponse(res);
+        if (data?.incidents) {
+          setIncidentsList(data.incidents);
+          if (data.incidents.length > 0 && !selectedIncident) {
+            setSelectedIncident(data.incidents[0]);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch SIEM incidents:', err);
+    } finally {
+      setIncidentsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (activeTab === 'siem') {
-      fetchSocIncidents();
-    }
-  }, [activeTab]);
+    loadHistory();
+    loadLatestCves();
+    fetchIncidents();
+  }, [token]);
 
-
-
-
-
-
-
-
-  // --- RESILIENT FALLBACK SCAN GENERATORS ---
-  const createFallbackEmailScan = (targetEmail: string): ScanResult => {
-    const isClean = targetEmail.toLowerCase() === 'secure@cyberguard.com' || targetEmail.toLowerCase() === 'clean@gmail.com';
-    const breaches = isClean ? [] : [
-      {
-        id: `b-canva-${Date.now()}`,
-        targetEmail,
-        Title: 'Canva Design Hub',
-        Domain: 'canva.com',
-        BreachDate: '2019-05-24',
-        AddedDate: '2019-05-24T00:00:00Z',
-        Description: 'In May 2019, Canva graphic design portal experienced a massive breach exposing 137 million accounts. The hacker "Gnosticplayers" claimed responsibility, obtaining emails, usernames, names, and passwords hash protected with bcrypt.',
-        DataClasses: ['Email addresses', 'Passwords', 'Names', 'Usernames'],
-        IsVerified: true,
-        LogoPath: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=128&auto=format&fit=crop&q=60',
-        severity: 'high' as const
-      },
-      {
-        id: `b-adobe-${Date.now()}`,
-        targetEmail,
-        Title: 'Adobe Systems Inc.',
-        Domain: 'adobe.com',
-        BreachDate: '2013-10-04',
-        AddedDate: '2013-10-04T00:00:00Z',
-        Description: 'A significant security compromise at Adobe resulted in the exposure of data for over 38 million active users, containing username credentials, password hints, and encrypted credit card information.',
-        DataClasses: ['Email addresses', 'Passwords', 'Password hints'],
-        IsVerified: true,
-        LogoPath: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&auto=format&fit=crop&q=60',
-        severity: 'medium' as const
+  // Handle Keybindings for SOC Terminal (Ctrl + ~)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        setShowTerminal(prev => !prev);
       }
-    ];
-
-    return {
-      id: `scan-${Date.now()}`,
-      targetEmail,
-      timestamp: new Date().toISOString(),
-      resultCount: breaches.length,
-      breaches,
-      riskScore: isClean ? 0 : 65,
-      scanType: 'email',
-      aiSummary: isClean 
-        ? `### 🟢 Zero Exposure Detected\n\nCyberGuard neural scan evaluated \`${targetEmail}\`. No active database breaches or credential leaks found.`
-        : `### 🚨 Vulnerability & Exposure Analysis\n\nTarget \`${targetEmail}\` was detected in ${breaches.length} security breach database leaks (Canva & Adobe). Password rotation and MFA enforcement are urgently required.`
     };
-  };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
-  const createFallbackLinkScan = (url: string, email: string): ScanResult => {
-    const isSuspicious = url.toLowerCase().includes('login') || url.toLowerCase().includes('verify') || url.toLowerCase().includes('xyz') || url.toLowerCase().includes('update');
-    const threats = isSuspicious 
-      ? ['High-risk credential harvesting keywords in URL path', 'Unverified Top-Level Domain (TLD) structure']
-      : ['Standard domain structure - No high-risk anomaly flags triggered'];
-    const riskScore = isSuspicious ? 78 : 12;
-
-    return {
-      id: `scan-link-${Date.now()}`,
-      targetEmail: email,
-      timestamp: new Date().toISOString(),
-      resultCount: threats.length,
-      breaches: [],
-      riskScore,
-      scanType: 'link',
-      targetLink: url,
-      detectedThreats: threats,
-      aiSummary: `### 🔍 CyberGuard Link Inspection\n\nTarget URL: \`${url}\`  \nThreat Index: **${riskScore}/100**  \n\n${threats.map(t => `- 🛑 **${t}**`).join('\n')}`
-    };
-  };
-
-  const createFallbackImageScan = (filename: string, base64Preview: string, email: string): ScanResult => {
-    return {
-      id: `scan-img-${Date.now()}`,
-      targetEmail: email,
-      timestamp: new Date().toISOString(),
-      resultCount: 2,
-      breaches: [],
-      riskScore: 45,
-      scanType: 'image',
-      targetImage: base64Preview,
-      imageFileName: filename,
-      detectedThreats: ['Visual text OCR scanned', 'Checked against known tech support scam templates'],
-      aiSummary: `### 👁️ CyberGuard Visual Vector Inspection\n\nFile Name: \`${filename}\`  \nRisk Index: **45/100**  \n\n- 🔍 OCR Text Extracted & Analyzed\n- 🛡️ No malicious payload code embedded in image EXIF metadata.`
-    };
-  };
-
-  const handleScanSubmit = async (e: React.FormEvent) => {
+  // Handlers for Scanners
+  const handleScanEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsQuotaExceeded(false);
-    
-    const emailToScan = scanEmail.trim();
-    if (!emailToScan || !emailToScan.includes('@')) {
-      setError('Please provide a valid email address to audit.');
+    if (!scanEmail || !scanEmail.includes('@')) {
+      setError('Please provide a valid target email address.');
       return;
     }
-
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('/api/scan', {
+      const res = await fetch('/api/scan', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ email: emailToScan })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ email: scanEmail })
       });
-
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const data = await response.json();
-          setScanEmail('');
-          setScans(prev => [data.scan, ...prev]);
-          if (data.user) onUserUpdate(data.user);
-          onSelectReport(data.scan);
-          return;
-        }
+      const data = await safeJsonResponse(res, 'Email breach assessment failed');
+      if (data?.scan) {
+        setCurrentScan(data.scan);
+        setScans(prev => [data.scan, ...prev]);
+        if (data.user) onUserUpdate(data.user);
       }
-
-      // Fallback local scan if API returns non-JSON or 404
-      const fallbackScan = createFallbackEmailScan(emailToScan);
-      setScanEmail('');
-      setScans(prev => [fallbackScan, ...prev]);
-      onSelectReport(fallbackScan);
     } catch (err: any) {
-      const fallbackScan = createFallbackEmailScan(emailToScan);
-      setScanEmail('');
-      setScans(prev => [fallbackScan, ...prev]);
-      onSelectReport(fallbackScan);
+      setError(err.message || 'Email breach scan execution error.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLinkScanSubmit = async (e: React.FormEvent) => {
+  const handleScanUrl = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsQuotaExceeded(false);
-
-    const urlToScan = scanUrl.trim();
-    if (!urlToScan) {
-      setError('Please provide a valid URL to scan.');
+    if (!scanUrl) {
+      setError('Target URL is required.');
       return;
     }
-
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('/api/scan-link', {
+      const res = await fetch('/api/scan-link', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ url: urlToScan })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ url: scanUrl })
       });
-
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const data = await response.json();
-          setScanUrl('');
-          setScans(prev => [data.scan, ...prev]);
-          if (data.user) onUserUpdate(data.user);
-          onSelectReport(data.scan);
-          return;
-        }
+      const data = await safeJsonResponse(res, 'Link reputation inspection failed');
+      if (data?.scan) {
+        setCurrentScan(data.scan);
+        setScans(prev => [data.scan, ...prev]);
+        if (data.user) onUserUpdate(data.user);
       }
-
-      const fallbackScan = createFallbackLinkScan(urlToScan, user.email);
-      setScanUrl('');
-      setScans(prev => [fallbackScan, ...prev]);
-      onSelectReport(fallbackScan);
     } catch (err: any) {
-      const fallbackScan = createFallbackLinkScan(urlToScan, user.email);
-      setScanUrl('');
-      setScans(prev => [fallbackScan, ...prev]);
-      onSelectReport(fallbackScan);
+      setError(err.message || 'URL threat inspection failed.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFileChange = (file: File) => {
+  const handleImageFileChange = (file: File) => {
     if (!file.type.startsWith('image/')) {
-      setError('Please upload an image file (PNG, JPG, JPEG, WEBP).');
+      setError('Selected artifact file must be a valid image format (PNG, JPG, WEBP).');
       return;
     }
-    setError(null);
     setImageFile(file);
+    setError(null);
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result as string);
-    };
+    reader.onload = () => setImagePreview(reader.result as string);
     reader.readAsDataURL(file);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleScanImage = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileChange(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleImageScanSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsQuotaExceeded(false);
-
     if (!imageFile || !imagePreview) {
-      setError('Please select or drop an image file first.');
+      setError('Please attach or drop an image payload artifact for inspection.');
       return;
     }
-
     setLoading(true);
+    setError(null);
     try {
       const base64Data = imagePreview.split(',')[1];
-      const mimeType = imageFile.type;
-      const filename = imageFile.name;
-
-      const response = await fetch('/api/scan-image', {
+      const res = await fetch('/api/scan-image', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           base64Image: base64Data,
-          mimeType,
-          filename
+          mimeType: imageFile.type,
+          filename: imageFile.name
         })
       });
-
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const data = await response.json();
-          setImageFile(null);
-          setImagePreview(null);
-          setScans(prev => [data.scan, ...prev]);
-          if (data.user) onUserUpdate(data.user);
-          onSelectReport(data.scan);
-          return;
-        }
+      const data = await safeJsonResponse(res, 'Visual threat inspection failed');
+      if (data?.scan) {
+        setCurrentScan(data.scan);
+        setScans(prev => [data.scan, ...prev]);
+        if (data.user) onUserUpdate(data.user);
       }
-
-      const fallbackScan = createFallbackImageScan(imageFile.name, imagePreview, user.email);
-      setImageFile(null);
-      setImagePreview(null);
-      setScans(prev => [fallbackScan, ...prev]);
-      onSelectReport(fallbackScan);
     } catch (err: any) {
-      const fallbackScan = createFallbackImageScan(imageFile.name, imagePreview, user.email);
-      setImageFile(null);
-      setImagePreview(null);
-      setScans(prev => [fallbackScan, ...prev]);
-      onSelectReport(fallbackScan);
+      setError(err.message || 'Visual payload inspection error.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Stats calculation
-  const totalAudits = scans.length;
-  const criticalExposures = scans.filter(s => s.riskScore >= 70).length;
-  const secureScans = scans.filter(s => s.resultCount === 0).length;
+  const handleCveSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCveLoading(true);
+    try {
+      const res = await fetch(`/api/cve/search?query=${encodeURIComponent(cveQuery)}&severity=${cveSeverity}&limit=20`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await safeJsonResponse(res, 'CVE query failed');
+      if (data) {
+        setCveResults(data);
+      }
+    } catch (err) {
+      console.warn('CVE search error:', err);
+    } finally {
+      setCveLoading(false);
+    }
+  };
+
+  const handleOsintLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!osintTarget) return;
+    setOsintLoading(true);
+    try {
+      const res = await fetch('/api/soc/osint-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ target: osintTarget })
+      });
+      const data = await safeJsonResponse(res, 'OSINT inspection failed');
+      if (data) setOsintResult(data);
+    } catch (err: any) {
+      console.warn('OSINT lookup error:', err);
+    } finally {
+      setOsintLoading(false);
+    }
+  };
+
+  const handleHashLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hashInput) return;
+    setHashLoading(true);
+    try {
+      const res = await fetch('/api/soc/hash-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ hash: hashInput, fileName: hashFileName })
+      });
+      const data = await safeJsonResponse(res, 'Malware hash forensics failed');
+      if (data) setHashResult(data);
+    } catch (err: any) {
+      console.warn('Hash lookup error:', err);
+    } finally {
+      setHashLoading(false);
+    }
+  };
+
+  const handleTriageSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIncident) return;
+    try {
+      const res = await fetch(`/api/soc/incidents/${selectedIncident.id}/triage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          status: triageStatus,
+          containmentAction: containmentActionInput,
+          note: triageNote
+        })
+      });
+      const data = await safeJsonResponse(res);
+      if (data?.incident) {
+        setSelectedIncident(data.incident);
+        setIncidentsList(prev => prev.map(inc => inc.id === data.incident.id ? data.incident : inc));
+        setTriageNote('');
+      }
+    } catch (err) {
+      console.warn('SIEM triage error:', err);
+    }
+  };
+
+  const handleStixExport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStixLoading(true);
+    try {
+      const res = await fetch('/api/soc/stix-export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          target: stixTarget,
+          hash: stixHash,
+          notes: stixNotes
+        })
+      });
+      const data = await safeJsonResponse(res);
+      if (data?.stixBundle) setStixBundleResult(data.stixBundle);
+    } catch (err) {
+      console.warn('STIX export error:', err);
+    } finally {
+      setStixLoading(false);
+    }
+  };
+
+  const handleWipeScans = async () => {
+    setIsClearingScans(true);
+    try {
+      await fetch('/api/scans/clear', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setScans([]);
+      setCurrentScan(null);
+      setClearScansSuccess(true);
+      setTimeout(() => {
+        setClearScansSuccess(false);
+        setConfirmWipe(false);
+      }, 3000);
+    } catch (err) {
+      console.warn('Failed to wipe scans:', err);
+    } finally {
+      setIsClearingScans(false);
+    }
+  };
+
+  // Helper for Bit-Density Risk Segment Meter
+  const renderBitDensityMeter = (score: number) => {
+    const totalBlocks = 20;
+    const filledBlocks = Math.round((score / 100) * totalBlocks);
+    const emptyBlocks = totalBlocks - filledBlocks;
+    const filledStr = '█'.repeat(filledBlocks);
+    const emptyStr = '░'.repeat(emptyBlocks);
+
+    let colorClass = 'text-[#00E676]';
+    let label = 'VERIFIED / LOW';
+    if (score >= 75) {
+      colorClass = 'text-[#FF334B]';
+      label = 'CRITICAL THREAT';
+    } else if (score >= 50) {
+      colorClass = 'text-[#FF9900]';
+      label = 'HIGH RISK';
+    } else if (score >= 25) {
+      colorClass = 'text-[#E0C000]';
+      label = 'MEDIUM HAZARD';
+    }
+
+    return (
+      <div className="font-mono text-xs flex flex-wrap items-center gap-3 bg-[#090D14] p-2.5 border border-[#263147] rounded-sm">
+        <span className={colorClass}>[{filledStr}{emptyStr}]</span>
+        <span className={`font-bold uppercase tracking-wider ${colorClass}`}>
+          RISK INDEX: {score}/100 • {label}
+        </span>
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 font-sans text-[#ECEFF4]">
       
-      {/* APPLE / MICROSOFT HERO SECURITY BANNER */}
-      <div className="bento-card p-6 md:p-8 relative overflow-hidden bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-950 border border-white/10 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)]">
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          <div className="space-y-2.5 max-w-2xl">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/25 flex items-center gap-1.5 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                CYBERGUARD ASSISTANT PRO LIVE
-              </span>
-              <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold bg-slate-800/80 text-slate-300 border border-slate-700">
-                100% UNLOCKED ENTERPRISE ACCESS
-              </span>
-            </div>
-            <h2 className="text-2xl md:text-3xl font-extrabold font-display tracking-tight text-white">
-              Your Digital Footprint, <span className="bg-gradient-to-r from-cyan-400 via-teal-300 to-blue-400 bg-clip-text text-transparent">Fully Guarded.</span>
-            </h2>
-            <p className="text-xs md:text-sm text-slate-400 leading-relaxed font-sans max-w-xl">
-              Welcome back, <span className="text-slate-200 font-semibold">{user.fullName || user.email}</span>. Your CyberGuard Assistant is continuously auditing breach databases, link threats, and visual vectors in real-time.
-            </p>
+      {/* SIEM COMMAND SUMMARY STRIP (Compact operational metrics) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono">
+        <div className="soc-panel p-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-[#00E5FF]" />
+            <span className="text-[#7E8B9B] uppercase font-semibold text-[10px]">Session Scans</span>
           </div>
+          <span className="font-bold text-white text-sm">{scans.length}</span>
+        </div>
 
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-3 gap-3 w-full lg:w-auto shrink-0 font-mono">
-            <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl text-center">
-              <span className="text-[9px] uppercase tracking-wider text-slate-500 block">Threat Status</span>
-              <span className="text-base font-bold text-emerald-400">0 ACTIVE</span>
-            </div>
-            <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl text-center">
-              <span className="text-[9px] uppercase tracking-wider text-slate-500 block">Total Audits</span>
-              <span className="text-base font-bold text-cyan-400">{totalAudits}</span>
-            </div>
-            <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl text-center">
-              <span className="text-[9px] uppercase tracking-wider text-slate-500 block">Security Rating</span>
-              <span className="text-base font-bold text-white">100 / 100</span>
-            </div>
+        <div className="soc-panel p-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-[#FF334B]" />
+            <span className="text-[#7E8B9B] uppercase font-semibold text-[10px]">High Severity</span>
           </div>
+          <span className="font-bold text-[#FF334B] text-sm">
+            {scans.filter(s => s.riskScore >= 50).length}
+          </span>
+        </div>
+
+        <div className="soc-panel p-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Database className="w-4 h-4 text-[#FF9900]" />
+            <span className="text-[#7E8B9B] uppercase font-semibold text-[10px]">CVE Index</span>
+          </div>
+          <span className="font-bold text-[#FF9900] text-sm">
+            {cveResults?.totalMatches || 0} RECORDS
+          </span>
+        </div>
+
+        <div className="soc-panel p-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-[#00E676]" />
+            <span className="text-[#7E8B9B] uppercase font-semibold text-[10px]">STIX 2.1 Engine</span>
+          </div>
+          <span className="font-bold text-[#00E676] text-sm">ACTIVE</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      
-      {/* LEFT & CENTER PANEL (Vulnerability Scanner & Analytics) */}
-      <div className="lg:col-span-2 space-y-6">
+      {/* VECTOR TAB MODULE SELECTOR (8 Functional Security Scanners) */}
+      <div className="soc-panel p-1.5 flex flex-wrap gap-1 border border-[#263147] text-[11px] font-mono font-bold">
+        {[
+          { id: 'email', label: 'EMAIL BREACH', icon: Mail },
+          { id: 'link', label: 'URL REPUTATION', icon: Link2 },
+          { id: 'image', label: 'VISUAL OCR', icon: FileText },
+          { id: 'cve', label: 'NIST CVE DB', icon: Database },
+          { id: 'osint', label: 'OSINT INSPECTOR', icon: Crosshair },
+          { id: 'hash', label: 'MALWARE HASH', icon: FileCode },
+          { id: 'siem', label: 'SIEM INCIDENTS', icon: ShieldAlert },
+          { id: 'stix', label: 'STIX 2.1 BUNDLE', icon: Layers },
+        ].map(tab => {
+          const IconComp = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-3 py-1.5 flex items-center gap-1.5 rounded-sm transition-colors cursor-pointer ${
+                isActive 
+                  ? 'bg-[#181F2E] text-[#00E5FF] border border-[#00E5FF]' 
+                  : 'text-[#7E8B9B] hover:text-[#ECEFF4] border border-transparent hover:border-[#263147]'
+              }`}
+            >
+              <IconComp className={`w-3.5 h-3.5 ${isActive ? 'text-[#00E5FF]' : ''}`} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* MAIN 3-COLUMN WORKSTATION LAYOUT */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         
-        {/* Core Scanner Card */}
-        <div className="bento-card p-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-2xl"></div>
+        {/* LEFT COLUMN: COMMAND FORM INPUTS & EXECUTORS (4 cols) */}
+        <div className="lg:col-span-4 space-y-4">
           
-          <div className="flex items-start justify-between border-b border-slate-800 pb-4 mb-4">
-            <div>
-              <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500">Security Core Engine v4</span>
-              <h2 className="text-xl font-bold font-display text-white mt-0.5">Integrity Breach Scanner</h2>
-            </div>
-            <span className="bg-cyan-950/30 border border-cyan-800/30 text-cyan-400 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> 
-              Vulnerability Audits: Active
-            </span>
-          </div>
-
-          {/* Navigation tabs for scanner type */}
-          <div className="flex border-b border-slate-800/60 mb-5 gap-1 sm:gap-2 font-mono text-[10px] font-bold overflow-x-auto print:hidden pb-1">
-            <button
-              type="button"
-              onClick={() => { setActiveTab('email'); setError(null); setIsQuotaExceeded(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'email'
-                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Mail className="w-3.5 h-3.5" />
-              <span>EMAIL AUDIT</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('link'); setError(null); setIsQuotaExceeded(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'link'
-                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Link2 className="w-3.5 h-3.5" />
-              <span>MALICIOUS LINK</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('image'); setError(null); setIsQuotaExceeded(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'image'
-                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Image className="w-3.5 h-3.5" />
-              <span>IMAGE VECTOR</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('cve');
-                setError(null);
-                setIsQuotaExceeded(false);
-                if (!cveResults && !cveLoading) {
-                  handleCveSearch(undefined, 'ALL');
-                }
-              }}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'cve'
-                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-              <span>CVE VULN DATABASE</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { setActiveTab('osint'); setError(null); setIsQuotaExceeded(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'osint'
-                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5 text-emerald-400" />
-              <span>OSINT FORENSICS</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('hash'); setError(null); setIsQuotaExceeded(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'hash'
-                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <FileCode className="w-3.5 h-3.5 text-purple-400" />
-              <span>MALWARE HASH LAB</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('siem'); setError(null); setIsQuotaExceeded(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'siem'
-                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5 text-amber-400" />
-              <span>SIEM INCIDENTS</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('stix'); setError(null); setIsQuotaExceeded(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'stix'
-                  ? 'border-sky-500 text-sky-400 bg-slate-900 font-bold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-400" />
-              <span>STIX DFIR EXPORT</span>
-            </button>
-          </div>
-
-          {error && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl text-rose-300 text-xs flex gap-2 mb-4">
-              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <span className="font-semibold block">Scan Aborted:</span>
-                <p>{error}</p>
-              </div>
-            </div>
-          )}
-
-
-
+          {/* TAB 1: EMAIL BREACH AUDITOR */}
           {activeTab === 'email' && (
-            <div className="space-y-6 animate-fade-in">
-                <form onSubmit={handleScanSubmit} className="space-y-4">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
-                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                        <Mail className="w-5 h-5" />
-                      </span>
-                      <input
-                        type="email"
-                        value={scanEmail}
-                        onChange={(e) => setScanEmail(e.target.value)}
-                        placeholder="Enter email to scan (e.g. security-officer@domain.com)..."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-all font-mono"
-                        disabled={loading}
-                        required
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0 font-mono"
-                    >
-                      {loading ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Auditing archives...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Search className="w-4 h-4" />
-                          <span>Launch Integrity Audit</span>
-                        </>
-                      )}
-                    </button>
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h2 className="font-display font-bold text-sm uppercase text-white flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-[#00E5FF]" />
+                  <span>Email Breach Auditor</span>
+                </h2>
+                <span className="status-chip status-chip-low">ACTIVE</span>
+              </div>
+              <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
+                Queries deterministic static leak databases matching target identity strings against historical exposure records.
+              </p>
+              
+              <form onSubmit={handleScanEmail} className="space-y-3 pt-1">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Target Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={scanEmail}
+                    onChange={(e) => setScanEmail(e.target.value)}
+                    placeholder="analyst@enterprise-domain.com"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    required
+                  />
+                </div>
+
+                {error && (
+                  <div className="p-2 bg-[#FF334B]/10 border border-[#FF334B]/30 text-[#FF334B] text-[11px] font-mono flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{error}</span>
                   </div>
-                </form>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  <span>{loading ? 'AUDITING BREACH LOGS...' : 'EXECUTE BREACH AUDIT'}</span>
+                </button>
+              </form>
             </div>
           )}
 
+          {/* TAB 2: URL REPUTATION SCANNER */}
           {activeTab === 'link' && (
-            <form onSubmit={handleLinkScanSubmit} className="space-y-4">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                    <Globe className="w-5 h-5" />
-                  </span>
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h2 className="font-display font-bold text-sm uppercase text-white flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-[#00E5FF]" />
+                  <span>URL Phishing Scanner</span>
+                </h2>
+                <span className="status-chip status-chip-low">ACTIVE</span>
+              </div>
+              <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
+                Deterministic rule engine inspecting target URL structures, domain age, typosquatting indicators, and SSL attributes.
+              </p>
+
+              <form onSubmit={handleScanUrl} className="space-y-3 pt-1">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Target URL / Host Domain
+                  </label>
                   <input
                     type="url"
                     value={scanUrl}
                     onChange={(e) => setScanUrl(e.target.value)}
-                    placeholder="Enter full URL to scan (e.g. https://paypal-login-verify.xyz)..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-all font-mono"
-                    disabled={loading}
+                    placeholder="https://suspicious-verify-auth.com"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
                     required
                   />
                 </div>
+
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0"
+                  className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  {loading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Analyzing links...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4" />
-                      <span>Scan Link Reputation</span>
-                    </>
-                  )}
+                  <Crosshair className="w-3.5 h-3.5" />
+                  <span>{loading ? 'INSPECTING URL STRUCTURE...' : 'RUN URL REPUTATION CHECK'}</span>
                 </button>
-              </div>
-            </form>
+              </form>
+            </div>
           )}
 
+          {/* TAB 3: VISUAL OCR & STGANOGRAPHY SCANNER */}
           {activeTab === 'image' && (
-            <form onSubmit={handleImageScanSubmit} className="space-y-4">
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
-                  isDragging
-                    ? 'border-cyan-400 bg-cyan-950/20'
-                    : imagePreview
-                    ? 'border-slate-700 bg-slate-950/20'
-                    : 'border-slate-800 hover:border-cyan-500 bg-slate-950/10'
-                }`}
-              >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      handleFileChange(e.target.files[0]);
-                    }
-                  }}
-                  accept="image/*"
-                  className="hidden"
-                  disabled={loading}
-                />
-                
-                {imagePreview ? (
-                  <div className="space-y-3">
-                    <div className="w-24 h-24 mx-auto rounded-lg overflow-hidden border border-slate-800 relative group">
-                      <img src={imagePreview} alt="Preview" className="w-full h-full object-cover animate-fade-in" />
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                        <span className="text-[10px] text-slate-400 font-mono">Change Image</span>
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-xs text-slate-300 font-mono block font-semibold truncate max-w-xs mx-auto">{imageFile?.name}</span>
-                      <span className="text-[10px] text-slate-500 font-mono block">{( (imageFile?.size || 0) / 1024 ).toFixed(1)} KB • Click to replace</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2 py-2">
-                    <UploadCloud className="w-8 h-8 text-slate-500 mx-auto animate-pulse" />
-                    <div>
-                      <span className="text-xs font-bold text-slate-300 block">Drag & drop visual asset here</span>
-                      <span className="text-[10px] text-slate-500 font-mono block mt-1">Supports screenshots, invoice scans, or suspicious QR flyers (Click to Browse)</span>
-                    </div>
-                  </div>
-                )}
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h2 className="font-display font-bold text-sm uppercase text-white flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[#00E5FF]" />
+                  <span>Visual Payload Inspector</span>
+                </h2>
+                <span className="status-chip status-chip-low">OCR ENGINE</span>
               </div>
 
-              {imagePreview && (
+              <form onSubmit={handleScanImage} className="space-y-3">
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    if (e.dataTransfer.files?.[0]) handleImageFileChange(e.dataTransfer.files[0]);
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border border-dashed p-4 text-center cursor-pointer transition-colors ${
+                    isDragging ? 'border-[#00E5FF] bg-[#181F2E]' : 'border-[#263147] bg-[#090D14] hover:border-[#7E8B9B]'
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => e.target.files?.[0] && handleImageFileChange(e.target.files[0])}
+                    className="hidden"
+                  />
+                  <UploadCloud className="w-6 h-6 text-[#00E5FF] mx-auto mb-1" />
+                  <span className="text-[11px] font-mono text-[#ECEFF4] block font-bold">
+                    {imageFile ? imageFile.name : 'DROP ARTIFACT IMAGE OR CLICK TO BROWSE'}
+                  </span>
+                  <span className="text-[9px] font-mono text-[#7E8B9B] block mt-0.5">
+                    PNG, JPG, WEBP • Max 10MB payload size
+                  </span>
+                </div>
+
+                {imagePreview && (
+                  <div className="border border-[#263147] bg-[#090D14] p-1 text-center">
+                    <img src={imagePreview} alt="Artifact preview" className="max-h-28 mx-auto object-contain" />
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="w-full bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all shadow-lg shadow-cyan-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55"
+                  disabled={loading || !imageFile}
+                  className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  {loading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Inspecting visual threat vectors & heuristics...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-4 h-4" />
-                      <span>Launch Visual Threat Inspection</span>
-                    </>
-                  )}
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{loading ? 'ANALYZING VISUAL TEXT...' : 'EXECUTE VISUAL INSPECTION'}</span>
                 </button>
-              )}
-            </form>
+              </form>
+            </div>
           )}
 
+          {/* TAB 4: NIST CVE DATABASE SEARCH */}
           {activeTab === 'cve' && (
-            <div className="space-y-5 animate-fade-in">
-              <form onSubmit={(e) => handleCveSearch(e)} className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                      <ShieldAlert className="w-5 h-5 text-amber-400" />
-                    </span>
-                    <input
-                      type="text"
-                      value={cveQuery}
-                      onChange={(e) => setCveQuery(e.target.value)}
-                      placeholder="Search CVE ID or keyword (e.g. CVE-2024, Log4j, OpenSSL, Apache, Remote Code Execution)..."
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-all font-mono"
-                      disabled={cveLoading}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={cveLoading}
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-amber-400/20 transition-all shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0 font-mono"
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h2 className="font-display font-bold text-sm uppercase text-white flex items-center gap-2">
+                  <Database className="w-4 h-4 text-[#00E5FF]" />
+                  <span>NIST NVD CVE Query</span>
+                </h2>
+                <span className="status-chip status-chip-medium">LIVE NVD FEED</span>
+              </div>
+
+              <form onSubmit={handleCveSearch} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Vulnerability Query / Tech Stack
+                  </label>
+                  <input
+                    type="text"
+                    value={cveQuery}
+                    onChange={(e) => setCveQuery(e.target.value)}
+                    placeholder="Log4j, OpenSSL, Apache, CVE-2023-..."
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    CVSS Severity Threshold
+                  </label>
+                  <select
+                    value={cveSeverity}
+                    onChange={(e) => setCveSeverity(e.target.value)}
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] rounded-sm font-mono"
                   >
-                    {cveLoading ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Searching NIST NVD...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-4 h-4" />
-                        <span>SEARCH CVE DATABASE</span>
-                      </>
-                    )}
-                  </button>
+                    <option value="ALL">ALL SEVERITIES</option>
+                    <option value="CRITICAL">CRITICAL ONLY (9.0+)</option>
+                    <option value="HIGH">HIGH (7.0 - 8.9)</option>
+                    <option value="MEDIUM">MEDIUM (4.0 - 6.9)</option>
+                  </select>
                 </div>
 
-                {/* Severity Quick Filters */}
-                <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/40 p-2.5 rounded-xl border border-slate-900 font-mono text-[10px]">
-                  <span className="text-slate-400 font-bold">Severity Filter:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((sev) => (
-                      <button
-                        key={sev}
-                        type="button"
-                        onClick={() => {
-                          setCveSeverity(sev);
-                          handleCveSearch(undefined, sev);
-                        }}
-                        className={`px-2.5 py-1 rounded-lg border font-bold uppercase cursor-pointer transition-all ${
-                          cveSeverity === sev
-                            ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        {sev}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </form>
-
-              {/* CVE Results Grid */}
-              {cveLoading ? (
-                <div className="py-16 text-center space-y-3 bg-slate-950/30 border border-slate-900 rounded-2xl">
-                  <RefreshCw className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
-                  <p className="text-xs text-slate-400 font-mono">Indexing and querying 66MB+ NIST NVD CVE vulnerability records...</p>
-                </div>
-              ) : cveResults && cveResults.cves.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between text-xs font-mono text-slate-400 px-1">
-                    <span>Matches Found: <strong className="text-amber-400">{cveResults.totalMatches}</strong> CVE records</span>
-                    <span className="text-[10px] text-slate-500">Source: Official NIST NVD 2.0 Repository</span>
-                  </div>
-
-                  <div className="grid gap-3">
-                    {cveResults.cves.map((cve) => (
-                      <div
-                        key={cve.id}
-                        className="bg-slate-950/60 border border-slate-850 hover:border-slate-800 rounded-2xl p-4 md:p-5 space-y-3 transition-all"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-900 pb-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold font-mono text-cyan-400 select-all">{cve.id}</span>
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider border ${
-                              cve.severity === 'CRITICAL'
-                                ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
-                                : cve.severity === 'HIGH'
-                                ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
-                                : cve.severity === 'MEDIUM'
-                                ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
-                                : 'bg-slate-500/15 border-slate-500/30 text-slate-400'
-                            }`}>
-                              {cve.severity} SEVERITY
-                            </span>
-                            <span className="text-[10px] font-mono text-slate-500">Source: {cve.sourceIdentifier}</span>
-                          </div>
-                          {cve.score > 0 && (
-                            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
-                              <span className="text-[10px] font-mono text-slate-400">CVSS v3.1:</span>
-                              <span className={`text-xs font-bold font-mono ${cve.score >= 9 ? 'text-rose-400' : cve.score >= 7 ? 'text-amber-400' : 'text-cyan-400'}`}>
-                                {cve.score.toFixed(1)} / 10.0
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        <p className="text-xs text-slate-300 leading-relaxed font-sans">{cve.description}</p>
-
-                        {cve.vectorString && (
-                          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-950 text-[10px] font-mono text-slate-400 truncate select-all">
-                            <span className="text-slate-500 font-semibold mr-1">VECTOR:</span>
-                            {cve.vectorString}
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 pt-1">
-                          <span>Published: {cve.published ? new Date(cve.published).toLocaleDateString() : 'N/A'}</span>
-                          <span>Last Modified: {cve.lastModified ? new Date(cve.lastModified).toLocaleDateString() : 'N/A'}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : cveResults ? (
-                <div className="py-12 text-center space-y-2 bg-slate-950/30 border border-slate-900 rounded-2xl">
-                  <ShieldAlert className="w-8 h-8 text-slate-600 mx-auto" />
-                  <p className="text-xs text-slate-400 font-mono">No matching CVE records found for query "{cveQuery}".</p>
-                </div>
-              ) : null}
-            </div>
-          )}
-
-
-
-
-
-          {/* 6. OSINT FORENSICS TAB */}
-          {activeTab === 'osint' && (
-            <div className="space-y-5 animate-fade-in">
-              <form onSubmit={handleOsintSubmit} className="space-y-3">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-emerald-400">
-                      <Globe className="w-5 h-5" />
-                    </span>
-                    <input
-                      type="text"
-                      value={osintTarget}
-                      onChange={(e) => setOsintTarget(e.target.value)}
-                      placeholder="Enter target IP address or domain (e.g. 185.220.101.5 or suspect-c2.net)..."
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-all font-mono"
-                      disabled={osintLoading}
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={osintLoading}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs py-3 px-6 rounded-xl border border-emerald-400/20 transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 shrink-0"
-                  >
-                    {osintLoading ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Querying OSINT Nodes...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-4 h-4" />
-                        <span>Inspect Target OSINT</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-
-              {osintResult && (
-                <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-5 space-y-5 animate-fade-in">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">{osintResult.location.flag}</span>
-                        <h3 className="text-lg font-bold text-white font-mono">{osintResult.target}</h3>
-                        <span className="text-xs text-slate-400 font-mono">({osintResult.resolvedIp})</span>
-                      </div>
-                      <span className="text-xs text-slate-400 font-mono block mt-0.5">
-                        {osintResult.location.city}, {osintResult.location.country} • {osintResult.location.isp} ({osintResult.location.asn})
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="bg-slate-900 border border-slate-800 px-3.5 py-1.5 rounded-xl font-mono text-center">
-                        <span className="text-[9px] text-slate-500 uppercase block">Threat Score</span>
-                        <span className={`text-base font-bold ${osintResult.reputationScore > 50 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                          {osintResult.reputationScore} / 100
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Blacklist Status & Categories */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                        Threat Intelligence Blacklists
-                      </span>
-                      <div className="space-y-1.5">
-                        {osintResult.blacklists.map((bl, i) => (
-                          <div key={i} className="flex items-center justify-between text-xs font-mono bg-slate-950/80 px-2.5 py-1.5 rounded border border-slate-850">
-                            <span className="text-slate-300">{bl.name}</span>
-                            <span className={bl.listed ? 'text-rose-400 font-bold' : 'text-emerald-400 font-semibold'}>
-                              {bl.listed ? `LISTED (${bl.category})` : 'CLEAN'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Open Ports & Services Audit */}
-                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <Server className="w-3.5 h-3.5 text-cyan-400" />
-                        Port & Attack Surface Audit
-                      </span>
-                      <div className="space-y-1.5">
-                        {osintResult.openPorts.map((pt, i) => (
-                          <div key={i} className="flex items-center justify-between text-xs font-mono bg-slate-950/80 px-2.5 py-1.5 rounded border border-slate-850">
-                            <div className="flex items-center gap-2">
-                              <span className="text-cyan-400 font-bold">:{pt.port}</span>
-                              <span className="text-slate-300">{pt.service}</span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
-                              pt.state === 'open' ? (pt.risk === 'high' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400') : 'text-slate-600'
-                            }`}>
-                              {pt.state}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* DNS & SSL Cert Inspection */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">DNS Infrastructure Records</span>
-                      <div className="space-y-1.5">
-                        {osintResult.dnsRecords.map((dns, i) => (
-                          <div key={i} className="bg-slate-950 p-2 rounded border border-slate-850 space-y-0.5">
-                            <div className="flex justify-between text-[10px] text-cyan-400 font-bold">
-                              <span>RECORD [{dns.type}]</span>
-                              <span className={dns.status === 'ok' ? 'text-emerald-400' : 'text-amber-400'}>{dns.status.toUpperCase()}</span>
-                            </div>
-                            <div className="text-slate-300 truncate">{dns.value}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {osintResult.sslCert && (
-                      <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">SSL/TLS Certificate Validity</span>
-                        <div className="bg-slate-950 p-2.5 rounded border border-slate-850 space-y-1 text-slate-300">
-                          <div><span className="text-slate-500">Issuer:</span> {osintResult.sslCert.issuer}</div>
-                          <div><span className="text-slate-500">Cipher:</span> {osintResult.sslCert.cipher}</div>
-                          <div><span className="text-slate-500">Expires in:</span> {osintResult.sslCert.expiresInDays} days</div>
-                          <div>
-                            <span className="text-slate-500 block">SAN Domains:</span>
-                            <span className="text-cyan-400">{osintResult.sslCert.sanDomains.join(', ')}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 7. MALWARE PAYLOAD HASH LAB TAB */}
-          {activeTab === 'hash' && (
-            <div className="space-y-5 animate-fade-in">
-              <form onSubmit={handleHashSubmit} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2 relative">
-                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400">
-                      <FileCode className="w-5 h-5" />
-                    </span>
-                    <input
-                      type="text"
-                      value={hashInput}
-                      onChange={(e) => setHashInput(e.target.value)}
-                      placeholder="Paste MD5, SHA-1, or SHA-256 binary payload hash..."
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 transition-all font-mono"
-                      disabled={hashLoading}
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={hashLoading}
-                    className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-purple-400/20 transition-all shadow-lg shadow-purple-500/10 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55"
-                  >
-                    {hashLoading ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Analyzing Hash...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-4 h-4" />
-                        <span>Inspect Hash Forensics</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-
-              {hashResult && (
-                <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-5 space-y-5 animate-fade-in">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3 font-mono">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          hashResult.malwareClassification === 'malicious' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        }`}>
-                          {hashResult.malwareClassification.toUpperCase()}
-                        </span>
-                        {hashResult.threatFamily && (
-                          <span className="text-xs text-purple-400 font-bold">{hashResult.threatFamily}</span>
-                        )}
-                      </div>
-                      <span className="text-xs text-slate-300 font-bold block mt-1">{hashResult.fileName}</span>
-                      <span className="text-[10px] text-slate-500 block">Hash [{hashResult.hashType}]: {hashResult.hash}</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-center">
-                      <span className="text-[9px] text-slate-500 uppercase block">Shannon Entropy</span>
-                      <span className="text-sm font-bold text-amber-400">{hashResult.entropyScore} / 8.00</span>
-                    </div>
-                  </div>
-
-                  {/* Format & Signature details */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Magic Bytes & File Format</span>
-                      <div className="bg-slate-950 p-2.5 rounded border border-slate-850 space-y-1 text-slate-300">
-                        <div><span className="text-slate-500">Detected Format:</span> {hashResult.detectedFormat}</div>
-                        <div><span className="text-slate-500">Magic Bytes Hex:</span> <span className="text-purple-300">{hashResult.magicBytes}</span></div>
-                        <div><span className="text-slate-500">Packed / Encrypted Payload:</span> {hashResult.isPackedOrEncrypted ? 'YES (High Entropy)' : 'NO'}</div>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Matched YARA Signature Rules</span>
-                      <div className="space-y-1">
-                        {hashResult.matchedYaraRules.map((yr, i) => (
-                          <div key={i} className="bg-purple-950/20 text-purple-300 border border-purple-800/30 px-2.5 py-1 rounded text-xs">
-                            yara::{yr}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 space-y-1 font-mono">
-                    <span className="font-bold flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4" />
-                      SOC Investigator Recommendation:
-                    </span>
-                    <p>{hashResult.recommendation}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 8. SIEM INCIDENTS TRIAGE TAB */}
-          {activeTab === 'siem' && (
-            <div className="space-y-5 animate-fade-in">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div>
-                  <h3 className="text-sm font-bold uppercase font-mono text-amber-400 flex items-center gap-2">
-                    <Activity className="w-4 h-4" />
-                    SIEM Active Incident Command Matrix
-                  </h3>
-                  <span className="text-[10px] text-slate-500 font-mono">Real-time incident response queue & automated triage containment</span>
-                </div>
                 <button
-                  onClick={fetchSocIncidents}
-                  className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-mono text-slate-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                  type="submit"
+                  disabled={cveLoading}
+                  className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${incidentsLoading ? 'animate-spin' : ''}`} />
-                  <span>Refresh Queue</span>
+                  <Search className="w-3.5 h-3.5" />
+                  <span>{cveLoading ? 'QUERYING NVD API...' : 'SEARCH NIST CVE DB'}</span>
                 </button>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* Incident Queue List */}
-                <div className="space-y-2 lg:col-span-1 max-h-[400px] overflow-y-auto pr-1">
-                  {incidentsList.map((inc) => (
-                    <div
-                      key={inc.id}
-                      onClick={() => { setSelectedIncident(inc); setTriageStatus(inc.status); }}
-                      className={`p-3 rounded-xl border text-xs font-mono cursor-pointer transition-all ${
-                        selectedIncident?.id === inc.id
-                          ? 'bg-amber-950/20 border-amber-500/50 text-white shadow-md'
-                          : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-bold text-amber-400">{inc.id}</span>
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                          inc.severity === 'critical' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-amber-500/20 text-amber-400'
-                        }`}>
-                          {inc.severity}
-                        </span>
-                      </div>
-                      <h4 className="font-semibold text-slate-200 truncate">{inc.title}</h4>
-                      <span className="text-[10px] text-slate-500 block mt-1">Status: {inc.status.toUpperCase()}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Incident Details & Triage Actions */}
-                {selectedIncident && (
-                  <div className="lg:col-span-2 bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-4 text-xs font-mono">
-                    <div className="flex justify-between items-start border-b border-slate-800 pb-2.5">
-                      <div>
-                        <span className="text-amber-400 font-bold text-sm block">{selectedIncident.id}: {selectedIncident.title}</span>
-                        <span className="text-slate-500 text-[10px]">Target: {selectedIncident.target} • Asset: {selectedIncident.affectedAsset}</span>
-                      </div>
-                      <span className="px-2.5 py-1 rounded bg-slate-900 text-slate-300 font-bold text-[10px]">
-                        MITRE: {selectedIncident.mitreTechniqueId}
-                      </span>
-                    </div>
-
-                    <p className="text-slate-300 font-sans text-xs leading-relaxed">{selectedIncident.description}</p>
-
-                    {/* Triage Form Controls */}
-                    <div className="space-y-3 pt-2 border-t border-slate-800/80">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Execute Incident Triage Playbook:</span>
-                      
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={triageStatus}
-                          onChange={(e) => setTriageStatus(e.target.value as any)}
-                          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
-                        >
-                          <option value="investigating">INVESTIGATING</option>
-                          <option value="mitigated">MITIGATED</option>
-                          <option value="escalated">ESCALATED</option>
-                          <option value="false_positive">FALSE POSITIVE</option>
-                        </select>
-
-                        <input
-                          type="text"
-                          value={containmentActionInput}
-                          onChange={(e) => setContainmentActionInput(e.target.value)}
-                          placeholder="Containment action (e.g. Block IP at Firewall)..."
-                          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
-                        />
-                      </div>
-
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={triageNote}
-                          onChange={(e) => setTriageNote(e.target.value)}
-                          placeholder="Add official officer investigation notes..."
-                          className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleTriageSubmit(selectedIncident.id)}
-                          className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs transition-all cursor-pointer"
-                        >
-                          Update Triage
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              </form>
             </div>
           )}
 
-          {/* 9. STIX 2.1 DFIR EVIDENCE EXPORT TAB */}
+          {/* TAB 5: OSINT IP & DOMAIN INSPECTOR */}
+          {activeTab === 'osint' && (
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h2 className="font-display font-bold text-sm uppercase text-white flex items-center gap-2">
+                  <Crosshair className="w-4 h-4 text-[#00E5FF]" />
+                  <span>OSINT Domain / IP Inspector</span>
+                </h2>
+                <span className="status-chip status-chip-low">DNS & REPUTATION</span>
+              </div>
+
+              <form onSubmit={handleOsintLookup} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Target IP Address or Hostname
+                  </label>
+                  <input
+                    type="text"
+                    value={osintTarget}
+                    onChange={(e) => setOsintTarget(e.target.value)}
+                    placeholder="185.220.101.5 or domain.com"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={osintLoading}
+                  className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>{osintLoading ? 'RESOLVING OSINT METRICS...' : 'RUN OSINT FORENSIC LOOKUP'}</span>
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* TAB 6: MALWARE PAYLOAD HASH FORENSICS */}
+          {activeTab === 'hash' && (
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h2 className="font-display font-bold text-sm uppercase text-white flex items-center gap-2">
+                  <FileCode className="w-4 h-4 text-[#00E5FF]" />
+                  <span>Malware Hash Forensics</span>
+                </h2>
+                <span className="status-chip status-chip-high">SHA256 / YARA</span>
+              </div>
+
+              <form onSubmit={handleHashLookup} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Binary Payload Hash (MD5, SHA1, SHA256)
+                  </label>
+                  <input
+                    type="text"
+                    value={hashInput}
+                    onChange={(e) => setHashInput(e.target.value)}
+                    placeholder="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Artifact Filename (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={hashFileName}
+                    onChange={(e) => setHashFileName(e.target.value)}
+                    placeholder="payload_dropper.exe"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={hashLoading}
+                  className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Cpu className="w-3.5 h-3.5" />
+                  <span>{hashLoading ? 'INSPECTING HASH MATCHES...' : 'ANALYZE BINARY HASH'}</span>
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* TAB 7: SIEM INCIDENT TRIAGE */}
+          {activeTab === 'siem' && (
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h2 className="font-display font-bold text-sm uppercase text-white flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-[#FF334B]" />
+                  <span>SIEM Incident Response</span>
+                </h2>
+                <span className="status-chip status-chip-critical">INCIDENT MATRIX</span>
+              </div>
+              <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
+                Active security incident triage queue with MITRE ATT&CK tactical tagging and automated containment options.
+              </p>
+
+              <button
+                onClick={fetchIncidents}
+                disabled={incidentsLoading}
+                className="w-full btn-soc py-2 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${incidentsLoading ? 'animate-spin' : ''}`} />
+                <span>REFRESH SIEM QUEUE</span>
+              </button>
+            </div>
+          )}
+
+          {/* TAB 8: STIX 2.1 DFIR BUNDLE EXPORT */}
           {activeTab === 'stix' && (
-            <div className="space-y-5 animate-fade-in">
-              <form onSubmit={handleStixExportSubmit} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h2 className="font-display font-bold text-sm uppercase text-white flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-[#00E5FF]" />
+                  <span>STIX 2.1 DFIR Bundler</span>
+                </h2>
+                <span className="status-chip status-chip-low">STIX SPEC v2.1</span>
+              </div>
+
+              <form onSubmit={handleStixExport} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Target Domain / Indicator
+                  </label>
                   <input
                     type="text"
                     value={stixTarget}
                     onChange={(e) => setStixTarget(e.target.value)}
-                    placeholder="Target IP address or domain..."
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-mono outline-none focus:border-sky-500"
+                    placeholder="malicious-domain.com"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Malware Payload Hash (SHA-256)
+                  </label>
                   <input
                     type="text"
                     value={stixHash}
                     onChange={(e) => setStixHash(e.target.value)}
-                    placeholder="SHA-256 payload hash string..."
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-mono outline-none focus:border-sky-500"
+                    placeholder="e3b0c44298fc1c149afbf4c89..."
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
                   />
                 </div>
-                <div className="flex gap-3">
-                  <input
-                    type="text"
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Forensic Notes
+                  </label>
+                  <textarea
                     value={stixNotes}
                     onChange={(e) => setStixNotes(e.target.value)}
-                    placeholder="Official forensic evidence summary / chain of custody notes..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white font-sans outline-none focus:border-sky-500"
+                    placeholder="Official evidence collected during threat triage..."
+                    className="w-full bg-[#090D14] border border-[#263147] p-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono h-16"
                   />
-                  <button
-                    type="submit"
-                    disabled={stixLoading}
-                    className="bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs py-3 px-6 rounded-xl border border-cyan-400/20 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-                  >
-                    {stixLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    <span>Generate STIX 2.1 Bundle</span>
-                  </button>
                 </div>
-              </form>
 
-              {stixBundleResult && (
-                <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 space-y-3 font-mono text-xs">
-                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <span className="text-cyan-400 font-bold flex items-center gap-2">
-                      <FileCode className="w-4 h-4" />
-                      STIX 2.1 Evidence Bundle JSON
+                <button
+                  type="submit"
+                  disabled={stixLoading}
+                  className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Code className="w-3.5 h-3.5" />
+                  <span>{stixLoading ? 'GENERATING BUNDLE...' : 'EXPORT STIX 2.1 BUNDLE'}</span>
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Quick Terminal Drawer Toggle */}
+          <div className="soc-panel p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-mono">
+              <TerminalIcon className="w-4 h-4 text-[#00E5FF]" />
+              <span>Interactive SOC Shell</span>
+            </div>
+            <button
+              onClick={() => setShowTerminal(!showTerminal)}
+              className="btn-soc px-2.5 py-1 text-[10px]"
+            >
+              {showTerminal ? 'HIDE SHELL' : 'LAUNCH SHELL (Ctrl+~)'}
+            </button>
+          </div>
+
+          {showTerminal && <Terminal />}
+
+        </div>
+
+        {/* CENTER COLUMN: TELEMETRY FINDINGS & FORENSICS INSPECTOR (5 cols) */}
+        <div className="lg:col-span-5 space-y-4">
+          
+          {/* DISPLAY SCAN RESULTS FOR BREACH / LINK / IMAGE SCANS */}
+          {['email', 'link', 'image'].includes(activeTab) && currentScan && (
+            <div className="soc-panel p-4 space-y-4">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono uppercase text-[#7E8B9B] block font-bold">
+                    AUDITED TARGET: {currentScan.targetEmail || currentScan.targetLink || currentScan.imageFileName}
+                  </span>
+                  <h3 className="font-display font-bold text-base uppercase text-white mt-0.5">
+                    Threat Audit Summary
+                  </h3>
+                </div>
+
+                {/* Raw JSON vs Annotated Switcher */}
+                <button
+                  onClick={() => setRawViewMode(!rawViewMode)}
+                  className={`btn-soc px-2 py-1 text-[10px] flex items-center gap-1 ${rawViewMode ? 'border-[#00E5FF] text-[#00E5FF]' : ''}`}
+                >
+                  <Code className="w-3 h-3" />
+                  <span>{rawViewMode ? 'ANNOTATED VIEW' : 'RAW STIX / JSON'}</span>
+                </button>
+              </div>
+
+              {/* Bit-Density Segment Risk Meter */}
+              {renderBitDensityMeter(currentScan.riskScore)}
+
+              {/* RAW JSON VIEW */}
+              {rawViewMode ? (
+                <div className="bg-[#090D14] border border-[#263147] p-3 rounded-sm font-mono text-[11px] overflow-x-auto text-[#00E5FF] max-h-96">
+                  <pre>{JSON.stringify(currentScan, null, 2)}</pre>
+                </div>
+              ) : (
+                /* ANNOTATED FINDINGS VIEW */
+                <div className="space-y-3">
+                  <div className="bg-[#090D14] border border-[#263147] p-3 text-xs leading-relaxed text-[#ECEFF4] font-mono whitespace-pre-wrap">
+                    {currentScan.aiSummary}
+                  </div>
+
+                  {currentScan.breaches && currentScan.breaches.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                        Exposed Database Leak Records ({currentScan.breaches.length})
+                      </span>
+                      <div className="space-y-2">
+                        {currentScan.breaches.map(breach => (
+                          <div key={breach.id} className="border border-[#263147] bg-[#090D14] p-2.5 rounded-sm space-y-1 text-xs">
+                            <div className="flex items-center justify-between font-mono">
+                              <strong className="text-white">{breach.Title} ({breach.Domain})</strong>
+                              <span className={`status-chip ${breach.severity === 'critical' ? 'status-chip-critical' : breach.severity === 'high' ? 'status-chip-high' : 'status-chip-medium'}`}>
+                                {breach.severity}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[#7E8B9B] leading-snug">{breach.Description}</p>
+                            <div className="text-[10px] font-mono text-[#00E5FF] pt-1">
+                              EXPOSED DATA: {breach.DataClasses.join(', ')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-[#263147]">
+                    <span className="text-[10px] font-mono text-[#7E8B9B]">
+                      TIMESTAMP: {new Date(currentScan.timestamp).toLocaleString()}
                     </span>
                     <button
-                      onClick={() => {
-                        const blob = new Blob([JSON.stringify(stixBundleResult, null, 2)], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `stix-bundle-${stixBundleResult.id}.json`;
-                        a.click();
-                      }}
-                      className="bg-slate-900 hover:bg-slate-800 text-cyan-300 px-3 py-1 rounded border border-slate-800 text-[10px] font-bold cursor-pointer"
+                      onClick={() => onSelectReport(currentScan)}
+                      className="btn-soc px-3 py-1 text-[10px] flex items-center gap-1 text-[#00E5FF] border-[#00E5FF]/40"
                     >
-                      Download JSON File
+                      <Eye className="w-3 h-3" />
+                      <span>FULL FORENSIC REPORT</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-900/60 rounded-xl text-slate-300 max-h-[300px] overflow-y-auto text-[11px] leading-relaxed">
-                    {JSON.stringify(stixBundleResult, null, 2)}
-                  </pre>
                 </div>
               )}
             </div>
           )}
-          <div className="mt-4 pt-4 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500 font-mono">
-            {activeTab === 'email' && (
-              <span>💡 Tip: Test <span className="text-emerald-400 select-all font-semibold">secure@cyberguard.com</span> to experience a clean 0-breach status.</span>
-            )}
-            {activeTab === 'link' && (
-              <span>💡 Tip: Try a mock URL like <span className="text-sky-400 select-all font-semibold">http://paypal-security-update.xyz</span> to test link threat diagnostics.</span>
-            )}
-            {activeTab === 'image' && (
-              <span>💡 Tip: Select any image file to inspect fraud indicators, suspicious QR targets, or tech support scam layouts.</span>
-            )}
-            {activeTab === 'grounding' && (
-              <span>💡 Tip: Search <span className="text-cyan-400 font-semibold select-all">latest active ransomware threats 2026</span> to fetch real-time grounded results.</span>
-            )}
-            {activeTab === 'intelligence' && (
-              <span>💡 Tip: Choose <span className="text-amber-400 font-semibold">Pro Analyst</span> to draft customized security policies or scan smart contract files.</span>
-            )}
-            {activeTab === 'voice' && (
-              <span>💡 Tip: Type your security query and hear CyberGuard's vocal synthesized live feed responses out loud.</span>
-            )}
-          </div>
-        </div>
 
-        {/* Security Metrics row */}
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div className="bento-card p-3 flex flex-col justify-center">
-            <span className="text-[9px] uppercase font-mono tracking-wider text-slate-500 block">Audits Executed</span>
-            <span className="text-lg font-bold font-mono text-white mt-1 block">{totalAudits}</span>
-          </div>
-          <div className="bento-card p-3 flex flex-col justify-center">
-            <span className="text-[9px] uppercase font-mono tracking-wider text-slate-500 block">Critical Leaks</span>
-            <span className="text-lg font-bold font-mono text-rose-400 mt-1 block">{criticalExposures}</span>
-          </div>
-          <div className="bento-card p-3 flex flex-col justify-center">
-            <span className="text-[9px] uppercase font-mono tracking-wider text-slate-500 block">Clean Endpoints</span>
-            <span className="text-lg font-bold font-mono text-emerald-400 mt-1 block">{secureScans}</span>
-          </div>
-        </div>
-
-        {/* Usage Audit Trail (Displays complete details, module used, dates, threat levels, and secure data masking) */}
-        <UsageAudit scans={scans} onSelectReport={onSelectReport} />
-
-        {/* Interactive Kali Terminal Toggle */}
-        <div className="space-y-3">
-          <button
-            onClick={() => setShowTerminal(!showTerminal)}
-            className="w-full bento-card px-4 py-3 rounded-xl flex items-center justify-between text-slate-300 text-xs font-mono transition-all cursor-pointer hover:border-cyan-500"
-          >
-            <div className="flex items-center gap-2">
-              <TerminalIcon className="w-4 h-4 text-emerald-500" />
-              <span>{showTerminal ? 'CLOSE KALI LINUX TERMINAL SHELL' : 'LAUNCH SIMULATED KALI LINUX SECURITY SHELL'}</span>
-            </div>
-            <span className="text-[10px] uppercase font-bold text-cyan-400">Ctrl + ~</span>
-          </button>
-          
-          {showTerminal && <Terminal />}
-        </div>
-
-      </div>
-
-      {/* RIGHT PANEL */}
-      <div className="space-y-6">
-        
-        {/* Threat Intelligence Side Panel */}
-        <ThreatIntelligence token={token} />
-
-        {/* Trust, Privacy & Compliance Center */}
-        <div className="bento-card p-5 space-y-4">
-          <div className="border-b border-slate-800 pb-2.5">
-            <div className="flex items-center gap-1.5 text-cyan-400 font-mono text-[10px] font-bold">
-              <ShieldCheck className="w-4 h-4 text-cyan-400" />
-              <span>SECURITY CERTIFICATION CORES</span>
-            </div>
-            <h3 className="font-bold text-sm text-white font-display mt-1">Trust & Compliance Center</h3>
-            <p className="text-[10px] text-slate-500 mt-0.5">Verified details on privacy, database sourcing, SOC2 roadmap, and security controls.</p>
-          </div>
-
-          {/* Tab Selector */}
-          <div className="grid grid-cols-5 gap-1 border-b border-slate-900 pb-2 text-[9px] font-mono font-bold text-center">
-            <button
-              type="button"
-              onClick={() => setComplianceTab('gmail')}
-              className={`pb-1 transition-all border-b cursor-pointer ${complianceTab === 'gmail' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
-            >
-              GMAIL
-            </button>
-            <button
-              type="button"
-              onClick={() => setComplianceTab('sourcing')}
-              className={`pb-1 transition-all border-b cursor-pointer ${complianceTab === 'sourcing' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
-            >
-              SOURCES
-            </button>
-            <button
-              type="button"
-              onClick={() => setComplianceTab('soc2')}
-              className={`pb-1 transition-all border-b cursor-pointer ${complianceTab === 'soc2' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
-            >
-              COMPLY
-            </button>
-            <button
-              type="button"
-              onClick={() => setComplianceTab('bounty')}
-              className={`pb-1 transition-all border-b cursor-pointer ${complianceTab === 'bounty' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
-            >
-              BOUNTY
-            </button>
-            <button
-              type="button"
-              onClick={() => setComplianceTab('erasure')}
-              className={`pb-1 transition-all border-b cursor-pointer ${complianceTab === 'erasure' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
-            >
-              ERASE
-            </button>
-          </div>
-
-          {/* Tab Contents */}
-          <div className="text-[11px] leading-relaxed text-slate-400 min-h-[140px] flex flex-col justify-between">
-            {complianceTab === 'gmail' && (
-              <div className="space-y-2">
-                <span className="font-semibold text-white font-mono text-[10px] uppercase block text-cyan-400">✉️ Gmail Transient Audit Guidelines</span>
-                <p>
-                  To secure your confidence, our real-time Gmail inbox vulnerability auditing operates on a **strict zero-retention policy**:
-                </p>
-                <ul className="list-disc pl-4 space-y-1 text-slate-500 text-[10px]">
-                  <li>We **never** store email bodies, attachments, or sender logs on our servers or databases.</li>
-                  <li>Gemini API analysis is performed **transiently in-memory** and results are cleared immediately upon session close.</li>
-                  <li>No customer data or processed email texts are logged or used for LLM training under Google's enterprise terms.</li>
-                </ul>
+          {/* DISPLAY NIST CVE RESULTS */}
+          {activeTab === 'cve' && (
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h3 className="font-display font-bold text-sm uppercase text-white">
+                  NVD CVE Records ({cveResults?.totalMatches || 0})
+                </h3>
+                <span className="text-[10px] font-mono text-[#7E8B9B]">NIST NVD API v2.0</span>
               </div>
-            )}
 
-            {complianceTab === 'sourcing' && (
-              <div className="space-y-2">
-                <span className="font-semibold text-white font-mono text-[10px] uppercase block text-cyan-400">📂 Certified Legal Sourcing</span>
-                <p>
-                  Our search and leak-matching query database leverages **simulated, audited static archives** matching schemas of high-profile data breaches:
-                </p>
-                <ul className="list-disc pl-4 space-y-1 text-slate-500 text-[10px]">
-                  <li>Matching sets are calibrated with historical reference files representing public academic datasets (similar to HIBP datasets).</li>
-                  <li>We do **not** scrape active dark forums or store plain-text passwords or sensitive identifiers.</li>
-                  <li>Database audits are indexed with cryptographic SHA-256 signatures to protect user identities.</li>
-                </ul>
+              {cveLoading ? (
+                <div className="py-12 text-center font-mono text-xs text-[#00E5FF] animate-pulse">
+                  Querying NIST National Vulnerability Database...
+                </div>
+              ) : cveResults?.cves && cveResults.cves.length > 0 ? (
+                <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+                  {cveResults.cves.map(cve => (
+                    <div key={cve.id} className="border border-[#263147] bg-[#090D14] p-3 rounded-sm space-y-1.5 font-mono text-xs">
+                      <div className="flex items-center justify-between">
+                        <strong className="text-[#00E5FF] font-bold">{cve.id}</strong>
+                        <span className={`status-chip ${cve.cvssScore >= 9.0 ? 'status-chip-critical' : cve.cvssScore >= 7.0 ? 'status-chip-high' : 'status-chip-medium'}`}>
+                          CVSS {cve.cvssScore}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#ECEFF4] leading-relaxed">{cve.description}</p>
+                      {cve.cvssVector && (
+                        <div className="text-[9px] text-[#7E8B9B] truncate">
+                          VECTOR: {cve.cvssVector}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center font-mono text-xs text-[#7E8B9B]">
+                  No CVE records found. Enter a keyword or technology name to search NVD.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* DISPLAY OSINT INSPECTION RESULTS */}
+          {activeTab === 'osint' && osintResult && (
+            <div className="soc-panel p-4 space-y-3 font-mono text-xs">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h3 className="font-display font-bold text-sm uppercase text-white">
+                  OSINT Analysis: {osintResult.target}
+                </h3>
+                <span className="status-chip status-chip-medium">
+                  SCORE: {osintResult.reputationScore}/100
+                </span>
               </div>
-            )}
 
-            {complianceTab === 'soc2' && (
-              <div className="space-y-2">
-                <span className="font-semibold text-white font-mono text-[10px] uppercase block text-cyan-400">🛡️ Compliance Certification Roadmap</span>
-                <p>
-                  We are actively building controls toward official regulatory framework compliance, tracked below:
-                </p>
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-slate-300 font-mono">SOC 2 Type II Certification</span>
-                    <span className="text-amber-400 bg-amber-500/10 px-1 rounded font-bold text-[8px] uppercase font-mono">In Progress Q4</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-slate-300 font-mono">GDPR Right to Erasure (Art. 17)</span>
-                    <span className="text-emerald-400 bg-emerald-500/10 px-1 rounded font-bold text-[8px] uppercase font-mono">Fully Compliant</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-slate-300 font-mono">256-Bit TLS In-Transit Encryption</span>
-                    <span className="text-emerald-400 bg-emerald-500/10 px-1 rounded font-bold text-[8px] uppercase font-mono">ACTIVE</span>
-                  </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="bg-[#090D14] p-2 border border-[#263147]">
+                  <span className="text-[#7E8B9B] block text-[9px] uppercase">Resolved IP</span>
+                  <span className="font-bold text-[#00E5FF]">{osintResult.resolvedIp}</span>
+                </div>
+                <div className="bg-[#090D14] p-2 border border-[#263147]">
+                  <span className="text-[#7E8B9B] block text-[9px] uppercase">Location / ISP</span>
+                  <span className="font-bold text-[#ECEFF4]">{osintResult.location.country} • {osintResult.location.isp}</span>
                 </div>
               </div>
-            )}
 
-            {complianceTab === 'bounty' && (
-              <div className="space-y-2">
-                <span className="font-semibold text-white font-mono text-[10px] uppercase block text-cyan-400">🐛 Responsible Disclosure Bug Bounty</span>
-                <p>
-                  CyberGuard maintains a supportive responsible disclosure program for security researchers:
-                </p>
-                <p className="text-slate-500 text-[10px]">
-                  If you discover a potential vulnerability or access bypass, please submit details to <strong className="text-cyan-400 select-all font-mono">hemantkaushal72@gmail.com</strong>.
-                </p>
-                <p className="text-slate-500 text-[10px]">
-                  We commit to validating reports within **48 hours** and offering rewards for verified high-severity disclosures.
-                </p>
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase text-[#7E8B9B] font-bold block">Blacklist DB Checks</span>
+                <div className="space-y-1">
+                  {osintResult.blacklists.map((bl, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-[#090D14] px-2 py-1 border border-[#263147] text-[11px]">
+                      <span>{bl.name}</span>
+                      <span className={bl.listed ? 'text-[#FF334B] font-bold' : 'text-[#00E676]'}>
+                        {bl.listed ? 'LISTED / THREAT' : 'CLEAN'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            )}
 
-            {complianceTab === 'erasure' && (
-              <div className="space-y-2">
-                <span className="font-semibold text-white font-mono text-[10px] uppercase block text-cyan-400">🗑️ User Data Erasure & Transparency</span>
-                <p>
-                  Under GDPR Article 17, you have the full right to remove your information. Click below to instantly purge your entire threat history logs.
-                </p>
-                
-                {clearScansSuccess ? (
-                  <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 text-[10px] rounded-xl flex items-center gap-1.5 font-bold font-mono">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>All scan histories have been purged.</span>
+              <div className="text-[10px] text-[#7E8B9B] bg-[#090D14] p-2 border border-[#263147]">
+                {osintResult.investigatorNotes}
+              </div>
+            </div>
+          )}
+
+          {/* DISPLAY MALWARE HASH RESULTS */}
+          {activeTab === 'hash' && hashResult && (
+            <div className="soc-panel p-4 space-y-3 font-mono text-xs">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h3 className="font-display font-bold text-sm uppercase text-white">
+                  Hash Forensics: {hashResult.fileName}
+                </h3>
+                <span className={`status-chip ${hashResult.malwareClassification === 'malicious' ? 'status-chip-critical' : 'status-chip-low'}`}>
+                  {hashResult.malwareClassification.toUpperCase()}
+                </span>
+              </div>
+
+              <div className="space-y-1 bg-[#090D14] p-2.5 border border-[#263147] text-[11px]">
+                <div><span className="text-[#7E8B9B]">HASH ({hashResult.hashType}):</span> <span className="text-[#00E5FF] select-all">{hashResult.hash}</span></div>
+                <div><span className="text-[#7E8B9B]">FORMAT:</span> {hashResult.detectedFormat}</div>
+                <div><span className="text-[#7E8B9B]">ENTROPY SCORE:</span> {hashResult.entropyScore}/8.00</div>
+                <div><span className="text-[#7E8B9B]">MAGIC BYTES:</span> {hashResult.magicBytes}</div>
+              </div>
+
+              {hashResult.matchedYaraRules.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase text-[#7E8B9B] font-bold block">Matched YARA Signatures</span>
+                  <div className="flex flex-wrap gap-1">
+                    {hashResult.matchedYaraRules.map((rule, i) => (
+                      <span key={i} className="bg-[#FF334B]/15 text-[#FF334B] border border-[#FF334B]/30 px-1.5 py-0.5 text-[10px]">
+                        {rule}
+                      </span>
+                    ))}
                   </div>
-                ) : confirmWipe ? (
-                  <div className="space-y-2 bg-rose-950/20 border border-rose-500/25 p-2 rounded-xl">
-                    <span className="text-[9px] text-rose-300 font-bold block uppercase tracking-wider text-center">🚨 PERMANENT ERASURE?</span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={isClearingScans}
-                        onClick={handleWipeScans}
-                        className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] py-1 px-2 rounded cursor-pointer disabled:opacity-50"
-                      >
-                        {isClearingScans ? "Purging..." : "Yes, Purge"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmWipe(false)}
-                        className="bg-slate-900 border border-slate-800 text-slate-300 font-bold text-[10px] py-1 px-2 rounded cursor-pointer"
-                      >
-                        Cancel
-                      </button>
+                </div>
+              )}
+
+              <div className="p-2.5 bg-[#181F2E] border border-[#263147] text-[11px] leading-relaxed">
+                <strong className="text-[#00E5FF] block text-[10px] uppercase">SOC Actionable Recommendation:</strong>
+                <p className="mt-0.5">{hashResult.recommendation}</p>
+              </div>
+            </div>
+          )}
+
+          {/* DISPLAY SIEM INCIDENT LIST & TRIAGE */}
+          {activeTab === 'siem' && (
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h3 className="font-display font-bold text-sm uppercase text-white">
+                  Active SIEM Incidents ({incidentsList.length})
+                </h3>
+                <span className="text-[10px] font-mono text-[#7E8B9B]">REALTIME INCIDENT MATRIX</span>
+              </div>
+
+              <div className="space-y-2">
+                {incidentsList.map(inc => (
+                  <div 
+                    key={inc.id}
+                    onClick={() => setSelectedIncident(inc)}
+                    className={`border p-3 rounded-sm font-mono text-xs cursor-pointer transition-colors ${
+                      selectedIncident?.id === inc.id 
+                        ? 'border-[#00E5FF] bg-[#181F2E]' 
+                        : 'border-[#263147] bg-[#090D14] hover:border-[#7E8B9B]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <strong className="text-white">{inc.id}: {inc.title}</strong>
+                      <span className={`status-chip ${inc.severity === 'critical' ? 'status-chip-critical' : 'status-chip-high'}`}>
+                        {inc.severity}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#7E8B9B] leading-snug">{inc.description}</p>
+                    <div className="flex items-center justify-between text-[10px] text-[#00E5FF] mt-2 pt-1 border-t border-[#263147]">
+                      <span>TACTIC: {inc.mitreTactic} ({inc.mitreTechniqueId})</span>
+                      <span className="uppercase text-white font-bold">{inc.status}</span>
                     </div>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmWipe(true)}
-                    className="w-full bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-400 font-bold font-mono text-xs py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Erase All Threat Scan Logs</span>
-                  </button>
-                )}
+                ))}
               </div>
-            )}
+
+              {selectedIncident && (
+                <form onSubmit={handleTriageSubmit} className="border-t border-[#263147] pt-3 space-y-2">
+                  <span className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Execute Triage Action for {selectedIncident.id}
+                  </span>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={triageStatus}
+                      onChange={(e) => setTriageStatus(e.target.value as any)}
+                      className="bg-[#090D14] border border-[#263147] p-1.5 text-xs text-[#ECEFF4] font-mono"
+                    >
+                      <option value="investigating">INVESTIGATING</option>
+                      <option value="mitigated">MITIGATED / CONTAINED</option>
+                      <option value="false_positive">FALSE POSITIVE</option>
+                      <option value="new">NEW ALERT</option>
+                    </select>
+
+                    <input
+                      type="text"
+                      value={containmentActionInput}
+                      onChange={(e) => setContainmentActionInput(e.target.value)}
+                      placeholder="Containment action (e.g. Block IP)"
+                      className="bg-[#090D14] border border-[#263147] p-1.5 text-xs text-[#ECEFF4] font-mono"
+                    />
+                  </div>
+
+                  <input
+                    type="text"
+                    value={triageNote}
+                    onChange={(e) => setTriageNote(e.target.value)}
+                    placeholder="Analyst triage note..."
+                    className="w-full bg-[#090D14] border border-[#263147] p-1.5 text-xs text-[#ECEFF4] font-mono"
+                  />
+
+                  <button type="submit" className="w-full btn-soc btn-soc-primary py-1.5 text-xs">
+                    UPDATE INCIDENT STATUS
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* DISPLAY STIX BUNDLE RESULT */}
+          {activeTab === 'stix' && stixBundleResult && (
+            <div className="soc-panel p-4 space-y-3">
+              <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+                <h3 className="font-display font-bold text-sm uppercase text-white">
+                  STIX 2.1 JSON Evidence Bundle
+                </h3>
+                <span className="status-chip status-chip-low">VALIDATED STIX JSON</span>
+              </div>
+              <div className="bg-[#090D14] border border-[#263147] p-3 rounded-sm font-mono text-[11px] overflow-x-auto text-[#00E5FF] max-h-96">
+                <pre>{JSON.stringify(stixBundleResult, null, 2)}</pre>
+              </div>
+            </div>
+          )}
+
+          {/* SYSTEM USAGE AUDIT TRAIL LOG */}
+          <UsageAudit scans={scans} onSelectReport={onSelectReport} />
+
+        </div>
+
+        {/* RIGHT COLUMN: GLOBAL THREAT RADAR & TRUST COMPLIANCE (3 cols) */}
+        <div className="lg:col-span-3 space-y-4">
+          
+          {/* Global Threat Intelligence Side Panel */}
+          <ThreatIntelligence token={token} />
+
+          {/* Trust, Privacy & Compliance Center */}
+          <div className="soc-panel p-4 space-y-3">
+            <div className="border-b border-[#263147] pb-2">
+              <div className="flex items-center gap-1 text-[#00E5FF] font-mono text-[10px] font-bold">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>COMPLIANCE & DATA RIGHTS</span>
+              </div>
+              <h3 className="font-display font-bold text-xs uppercase text-white mt-1">
+                Trust & Security Center
+              </h3>
+            </div>
+
+            {/* Compliance Selector Tabs */}
+            <div className="grid grid-cols-5 gap-0.5 border-b border-[#263147] pb-2 text-[9px] font-mono font-bold text-center">
+              {[
+                { id: 'gmail', label: 'GMAIL' },
+                { id: 'sourcing', label: 'LEGAL' },
+                { id: 'soc2', label: 'SOC2' },
+                { id: 'bounty', label: 'BOUNTY' },
+                { id: 'erasure', label: 'ERASE' },
+              ].map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setComplianceTab(item.id as any)}
+                  className={`pb-1 transition-colors cursor-pointer border-b ${
+                    complianceTab === item.id 
+                      ? 'border-[#00E5FF] text-[#00E5FF]' 
+                      : 'border-transparent text-[#7E8B9B] hover:text-[#ECEFF4]'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="text-[11px] font-mono leading-relaxed text-[#7E8B9B]">
+              {complianceTab === 'gmail' && (
+                <div className="space-y-1.5">
+                  <span className="font-bold text-[#00E5FF] text-[10px] uppercase block">Transient Inbox Audit</span>
+                  <p>Zero retention: email bodies are audited transiently in-memory and purged immediately after scan.</p>
+                </div>
+              )}
+
+              {complianceTab === 'sourcing' && (
+                <div className="space-y-1.5">
+                  <span className="font-bold text-[#00E5FF] text-[10px] uppercase block">Certified Sourcing</span>
+                  <p>Leak matching queries leverage audited static academic leak databases without active forum scraping.</p>
+                </div>
+              )}
+
+              {complianceTab === 'soc2' && (
+                <div className="space-y-1.5">
+                  <span className="font-bold text-[#00E5FF] text-[10px] uppercase block">SOC2 & GDPR Roadmap</span>
+                  <p>Fully compliant with GDPR Art. 17 right-to-erasure and enforced 256-bit TLS in-transit encryption.</p>
+                </div>
+              )}
+
+              {complianceTab === 'bounty' && (
+                <div className="space-y-1.5">
+                  <span className="font-bold text-[#00E5FF] text-[10px] uppercase block">Bug Bounty Program</span>
+                  <p>Submit vulnerability reports to <span className="text-[#00E5FF] select-all">hemantkaushal72@gmail.com</span> for 48h response validation.</p>
+                </div>
+              )}
+
+              {complianceTab === 'erasure' && (
+                <div className="space-y-2">
+                  <span className="font-bold text-[#00E5FF] text-[10px] uppercase block">GDPR Data Erasure</span>
+                  <p>Instantly purge all historical scan logs under this session.</p>
+
+                  {clearScansSuccess ? (
+                    <div className="p-2 bg-[#00E676]/10 border border-[#00E676]/30 text-[#00E676] text-[10px]">
+                      All threat scan logs purged successfully.
+                    </div>
+                  ) : confirmWipe ? (
+                    <div className="space-y-1.5 bg-[#FF334B]/10 border border-[#FF334B]/30 p-2">
+                      <span className="text-[9px] text-[#FF334B] font-bold block uppercase text-center">CONFIRM PERMANENT ERASURE?</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={isClearingScans}
+                          onClick={handleWipeScans}
+                          className="flex-1 bg-[#FF334B] text-white font-bold text-[10px] py-1 cursor-pointer"
+                        >
+                          {isClearingScans ? 'PURGING...' : 'YES, PURGE'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmWipe(false)}
+                          className="btn-soc px-2 py-1 text-[10px]"
+                        >
+                          CANCEL
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmWipe(true)}
+                      className="w-full btn-soc border-[#FF334B]/40 text-[#FF334B] hover:bg-[#FF334B]/10 py-1.5 text-[10px] flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>PURGE ALL SCAN LOGS</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
+
         </div>
 
       </div>
 
+      {/* Brand Privacy Modal Overlay */}
+      <PrivacyStatementModal 
+        isOpen={showPrivacyModal} 
+        onClose={() => setShowPrivacyModal(false)} 
+        isLoggedIn={true} 
+        userEmail={user.email} 
+        onWipeData={handleWipeScans} 
+      />
+
     </div>
-
-    {/* Brand Footer with Privacy Statement Option */}
-    <footer className="mt-8 pt-6 border-t border-slate-900/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-[10px] text-slate-500 font-mono">
-      <span>© 2026 CYBERGUARD SECURITY LABS. ALL RIGHTS RESERVED.</span>
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => setShowPrivacyModal(true)}
-          className="text-cyan-500 hover:text-cyan-400 hover:underline transition-all cursor-pointer font-bold bg-transparent border-none outline-none"
-        >
-          PRIVACY STATEMENT & DATA RIGHTS
-        </button>
-        <span>•</span>
-        <span>v4.0.12</span>
-      </div>
-    </footer>
-
-    {/* Privacy & Data Rights Modal Overlay */}
-    <PrivacyStatementModal 
-      isOpen={showPrivacyModal} 
-      onClose={() => setShowPrivacyModal(false)} 
-      isLoggedIn={true} 
-      userEmail={user.email} 
-      onWipeData={handleWipeScans} 
-    />
-
-  </div>
   );
 }

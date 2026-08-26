@@ -1,150 +1,165 @@
 @import "tailwindcss";
 
 :root {
-  --slate-50: #f8fafc;
-  --slate-100: #f1f5f9;
-  --slate-200: #e2e8f0;
-  --slate-300: #cbd5e1;
-  --slate-400: #94a3b8;
-  --slate-500: #64748b;
-  --slate-600: #475569;
-  --slate-700: #334155;
-  --slate-800: #1e293b;
-  --slate-850: #0f172a;
-  --slate-900: #0d1526;
-  --slate-950: #080d1a;
+  --bg-base: #090D14;
+  --bg-panel: #111622;
+  --bg-surface: #181F2E;
+  --border-grid: #263147;
+  --text-primary: #ECEFF4;
+  --text-muted: #7E8B9B;
+  --accent-cyan: #00E5FF;
+
+  --status-critical: #FF334B;
+  --status-high: #FF9900;
+  --status-medium: #E0C000;
+  --status-low: #00E676;
 }
 
 .theme-midnight {
-  --slate-50: #fafafd;
-  --slate-100: #f1f3f9;
-  --slate-200: #e2e7f3;
-  --slate-300: #cbd5e6;
-  --slate-400: #94a3c2;
-  --slate-500: #647496;
-  --slate-600: #475578;
-  --slate-700: #334160;
-  --slate-800: #1b2640;
-  --slate-850: #111a2e;
-  --slate-900: #0a1120;
-  --slate-950: #050812;
+  --bg-base: #06090F;
+  --bg-panel: #0E121B;
+  --bg-surface: #141A26;
+  --border-grid: #1E2838;
 }
 
 @theme {
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --color-brand-500: #0284c7;
-  --color-brand-400: #38bdf8;
 
-  --color-slate-50: var(--slate-50);
-  --color-slate-100: var(--slate-100);
-  --color-slate-200: var(--slate-200);
-  --color-slate-300: var(--slate-300);
-  --color-slate-400: var(--slate-400);
-  --color-slate-500: var(--slate-500);
-  --color-slate-600: var(--slate-600);
-  --color-slate-700: var(--slate-700);
-  --color-slate-800: var(--slate-800);
-  --color-slate-850: var(--slate-850);
-  --color-slate-900: var(--slate-900);
-  --color-slate-950: var(--slate-950);
+  --color-slate-950: var(--bg-base);
+  --color-slate-900: var(--bg-panel);
+  --color-slate-850: var(--bg-surface);
+  --color-slate-800: var(--border-grid);
 }
 
-/* Cool & Calm Glassmorphic Bento Cards */
-.bento-card {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 1.25rem;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
 }
 
-.bento-card:hover {
-  border-color: rgba(56, 189, 248, 0.3);
-  box-shadow: 0 8px 30px -5px rgba(2, 132, 199, 0.12), 0 0 1px rgba(255, 255, 255, 0.15);
-  transform: translateY(-1px);
+/* High-Density SOC Panel Container (No Glassmorphism, No Drop Shadows) */
+.soc-panel {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-grid);
+  border-radius: 0.25rem; /* micro 4px chamfer */
+  box-shadow: none;
 }
 
-.glass-card {
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+.soc-header {
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-grid);
 }
 
-.glass-header {
-  background: rgba(8, 13, 26, 0.88);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+/* Data Grid Line Utility */
+.grid-table {
+  border-collapse: collapse;
+  width: 100%;
 }
 
-/* Calm Status Tags */
-.status-tag {
-  padding: 4px 12px;
-  border-radius: 9999px;
+.grid-table th,
+.grid-table td {
+  border-bottom: 1px solid var(--border-grid);
+}
+
+/* Monospaced Technical Tags */
+.status-chip {
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
 }
 
-.status-live {
-  background: rgba(16, 185, 129, 0.12);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.1);
+.status-chip-critical {
+  background: rgba(255, 51, 75, 0.12);
+  color: #FF334B;
+  border: 1px solid rgba(255, 51, 75, 0.35);
 }
 
-.status-soon {
-  background: rgba(245, 158, 11, 0.12);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.25);
+.status-chip-high {
+  background: rgba(255, 153, 0, 0.12);
+  color: #FF9900;
+  border: 1px solid rgba(255, 153, 0, 0.35);
 }
 
-.scan-line {
-  border-left: 3px solid #0284c7;
-  padding-left: 14px;
+.status-chip-medium {
+  background: rgba(224, 192, 0, 0.12);
+  color: #E0C000;
+  border: 1px solid rgba(224, 192, 0, 0.35);
 }
 
-/* Cool Calm Action Buttons */
-.btn-primary {
-  background: linear-gradient(135deg, #0284c7 0%, #0f766e 100%);
-  color: #ffffff;
+.status-chip-low {
+  background: rgba(0, 230, 118, 0.12);
+  color: #00E676;
+  border: 1px solid rgba(0, 230, 118, 0.35);
+}
+
+/* Tactical Action Buttons */
+.btn-soc {
+  background-color: #161E2E;
+  color: var(--text-primary);
+  border: 1px solid var(--border-grid);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-weight: 600;
-  border-radius: 0.85rem;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.btn-primary:hover {
-  background: linear-gradient(135deg, #0369a1 0%, #115e59 100%);
-  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.3);
-  transform: translateY(-1px);
+.btn-soc:hover {
+  background-color: #1E283C;
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
 }
 
-/* Modern Dark Scrollbars */
+.btn-soc-primary {
+  background-color: #00E5FF;
+  color: #090D14;
+  border: 1px solid #00E5FF;
+  font-weight: 700;
+}
+
+.btn-soc-primary:hover {
+  background-color: #33EBFF;
+  border-color: #33EBFF;
+  color: #090D14;
+}
+
+/* High-Contrast Inputs */
+input, textarea, select {
+  font-family: var(--font-mono);
+}
+
+input:focus, textarea:focus, select:focus, button:focus {
+  outline: none;
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 0 0 1px var(--accent-cyan) !important;
+}
+
+/* Dark Dense Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--slate-950);
+  background: var(--bg-base);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--slate-800);
-  border-radius: 4px;
+  background: var(--border-grid);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--slate-700);
+  background: #3A4760;
 }
-

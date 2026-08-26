@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Download, Printer, AlertTriangle, CheckSquare, ShieldCheck, ChevronLeft } from 'lucide-react';
+import { Shield, Download, Printer, AlertTriangle, CheckSquare, ShieldCheck, ChevronLeft, FileText, Code } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { ScanResult } from '../types';
 
@@ -10,9 +10,9 @@ interface ReportViewProps {
 
 export default function ReportView({ scan, onBack }: ReportViewProps) {
   const getRiskLevel = (score: number) => {
-    if (score >= 70) return { label: 'CRITICAL HAZARD', color: 'text-rose-400 border-rose-500/20 bg-rose-500/5' };
-    if (score >= 40) return { label: 'MEDIUM RISK', color: 'text-amber-400 border-amber-500/20 bg-amber-500/5' };
-    return { label: 'LOW VULNERABILITY', color: 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' };
+    if (score >= 70) return { label: 'CRITICAL HAZARD', color: 'status-chip-critical' };
+    if (score >= 40) return { label: 'MEDIUM RISK', color: 'status-chip-high' };
+    return { label: 'LOW / VERIFIED', color: 'status-chip-low' };
   };
 
   const risk = getRiskLevel(scan.riskScore);
@@ -28,11 +28,10 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
       format: 'a4',
     });
 
-    const primaryColor = [6, 182, 212]; // cyan-500
-    const darkSlate = [15, 23, 42];    // slate-900
-    const lightGray = [248, 250, 252]; // slate-50
-    const textGray = [100, 116, 139];  // slate-500
-
+    const primaryColor = [0, 229, 255]; // cyan
+    const darkSlate = [9, 13, 20];      // dark charcoal
+    const lightGray = [240, 243, 246];  // light gray
+    
     // Header Background Accent bar
     doc.setFillColor(darkSlate[0], darkSlate[1], darkSlate[2]);
     doc.rect(0, 0, 210, 40, 'F');
@@ -40,13 +39,13 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
     // Header Title
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(20);
-    doc.text('CYBERGUARD SECURITY BRIEFING', 15, 18);
+    doc.setFontSize(18);
+    doc.text('CYBERGUARD FORENSIC BRIEFING', 15, 18);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text('REAL-TIME THREAT EXPOSURE PORTAL', 15, 25);
+    doc.setTextColor(0, 200, 255);
+    doc.text('REAL-TIME THREAT EXPOSURE & DIAGNOSTICS REPORT', 15, 25);
 
     doc.setFontSize(9);
     doc.setTextColor(150, 150, 150);
@@ -56,7 +55,7 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
 
     // Target Details Box
     doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
-    doc.roundedRect(15, y, 180, 22, 3, 3, 'F');
+    doc.roundedRect(15, y, 180, 22, 2, 2, 'F');
     
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
@@ -67,9 +66,8 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
     
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.setTextColor(0, 150, 200);
     
-    // Safely clip target val if too long
     const targetValClipped = targetVal && targetVal.length > 70 ? targetVal.substring(0, 70) + '...' : targetVal || '';
     doc.text(targetValClipped, 20, y + 15);
 
@@ -94,113 +92,6 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
 
     y += 28;
 
-    // Heuristic summary section
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-    doc.text('CYBER FORENSIC AUDIT SUMMARY', 15, y);
-    y += 5;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(50, 50, 50);
-    
-    // Split text into line-wrapped array for standard page width
-    const summaryLines = doc.splitTextToSize(scan.aiSummary || 'Security assessment completed cleanly.', 180);
-    doc.text(summaryLines, 15, y);
-    y += (summaryLines.length * 5) + 8;
-
-    // If y is close to page end, add a new page
-    if (y > 250) {
-      doc.addPage();
-      y = 20;
-    }
-
-    // Threats details section
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-    const threatTitle = scan.scanType === 'link' ? 'DETECTED LINK MALICIOUS THREATS' : scan.scanType === 'image' ? 'DETECTOR SOCIAL ENGINEERING THREATS' : 'DATABASE LEAK INCIDENTS';
-    doc.text(threatTitle, 15, y);
-    y += 6;
-
-    if (scan.scanType === 'link' || scan.scanType === 'image') {
-      const threats = scan.detectedThreats || [];
-      if (threats.length === 0) {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.setTextColor(70, 70, 70);
-        doc.text('✓ No active visual or programmatic threats detected.', 15, y);
-        y += 8;
-      } else {
-        threats.forEach((threat, idx) => {
-          if (y > 260) {
-            doc.addPage();
-            y = 20;
-          }
-          doc.setFillColor(254, 242, 242);
-          doc.roundedRect(15, y, 180, 8, 1, 1, 'F');
-          
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
-          doc.setTextColor(220, 38, 38);
-          doc.text(`[FLAG ${idx + 1}]`, 18, y + 5.5);
-          
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(50, 50, 50);
-          doc.text(threat.length > 80 ? threat.substring(0, 80) + '...' : threat, 35, y + 5.5);
-          y += 11;
-        });
-      }
-    } else {
-      const breaches = scan.breaches || [];
-      if (breaches.length === 0) {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.setTextColor(70, 70, 70);
-        doc.text('✓ Integrity sound. Zero matching records identified.', 15, y);
-        y += 8;
-      } else {
-        breaches.forEach((b, idx) => {
-          if (y > 240) {
-            doc.addPage();
-            y = 20;
-          }
-          doc.setFillColor(245, 247, 250);
-          doc.roundedRect(15, y, 180, 24, 2, 2, 'F');
-          
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
-          doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-          doc.text(`${idx + 1}. ${b.Title} (${b.Domain || ''})`, 18, y + 6);
-          
-          doc.setFontSize(8);
-          doc.setTextColor(textGray[0], textGray[1], textGray[2]);
-          doc.text(`Breach Date: ${b.BreachDate || 'N/A'}  |  Severity: ${b.severity || 'high'}`, 18, y + 11);
-          
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8.5);
-          doc.setTextColor(60, 60, 60);
-          const descClipped = b.Description && b.Description.length > 105 ? b.Description.substring(0, 105) + '...' : b.Description || '';
-          doc.text(descClipped, 18, y + 16);
-
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(8);
-          doc.setTextColor(110, 120, 130);
-          doc.text(`Leaked items: ${(b.DataClasses || []).join(', ')}`, 18, y + 21);
-          
-          y += 28;
-        });
-      }
-    }
-
-    y += 5;
-    if (y > 230) {
-      doc.addPage();
-      y = 20;
-    }
-
-    // Countermeasures Section
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
@@ -230,7 +121,6 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
       y += 6;
     });
 
-    // Page footer note
     doc.setFontSize(8);
     doc.setTextColor(120, 120, 120);
     doc.text('This security threat assessment was generated securely by CyberGuard. Keep credentials private.', 15, 287);
@@ -238,287 +128,221 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
     doc.save(`CyberGuard_Security_Briefing_${scan.id.substring(0, 8).toUpperCase()}.pdf`);
   };
 
+  // Helper for Bit-Density Risk Segment Meter
+  const renderBitDensityMeter = (score: number) => {
+    const totalBlocks = 20;
+    const filledBlocks = Math.round((score / 100) * totalBlocks);
+    const emptyBlocks = totalBlocks - filledBlocks;
+    const filledStr = '█'.repeat(filledBlocks);
+    const emptyStr = '░'.repeat(emptyBlocks);
+
+    let colorClass = 'text-[#00E676]';
+    let label = 'VERIFIED / LOW';
+    if (score >= 75) {
+      colorClass = 'text-[#FF334B]';
+      label = 'CRITICAL THREAT';
+    } else if (score >= 50) {
+      colorClass = 'text-[#FF9900]';
+      label = 'HIGH RISK';
+    } else if (score >= 25) {
+      colorClass = 'text-[#E0C000]';
+      label = 'MEDIUM HAZARD';
+    }
+
+    return (
+      <div className="font-mono text-xs flex flex-wrap items-center gap-3 bg-[#090D14] p-3 border border-[#263147] rounded-sm">
+        <span className={colorClass}>[{filledStr}{emptyStr}]</span>
+        <span className={`font-bold uppercase tracking-wider ${colorClass}`}>
+          SCORE: {score}/100 • {label}
+        </span>
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-6 print:bg-white print:text-black">
-      {/* Back & Export buttons header */}
+    <div className="space-y-4 text-[#ECEFF4] font-sans print:bg-white print:text-black">
+      
+      {/* ACTION TOOLBAR */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 print:hidden">
         <button
           onClick={onBack}
-          className="text-xs text-slate-400 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl self-start"
+          className="btn-soc px-3 py-1.5 flex items-center gap-1 text-xs"
         >
-          <ChevronLeft className="w-4 h-4" />
-          Back to Dashboard
+          <ChevronLeft className="w-4 h-4 text-[#00E5FF]" />
+          <span>RETURN TO WORKSTATION</span>
         </button>
         <div className="flex items-center gap-2">
           <button
             onClick={handleDownloadPdf}
-            className="flex-1 sm:flex-none bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+            className="btn-soc btn-soc-primary px-3.5 py-1.5 text-xs flex items-center gap-1.5 cursor-pointer"
           >
-            <Download className="w-4 h-4" />
-            Download PDF Report
+            <Download className="w-3.5 h-3.5" />
+            <span>DOWNLOAD PDF BRIEFING</span>
           </button>
           <button
             onClick={handlePrint}
-            className="flex-1 sm:flex-none bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            className="btn-soc px-3.5 py-1.5 text-xs flex items-center gap-1.5 cursor-pointer"
           >
-            <Printer className="w-4 h-4" />
-            Export / Print
+            <Printer className="w-3.5 h-3.5" />
+            <span>EXPORT / PRINT</span>
           </button>
         </div>
       </div>
 
-      {/* Main printable report body */}
-      <div id="cyberguard-printable-report" className="bento-card p-6 sm:p-8 space-y-8 relative overflow-hidden print:border-none print:shadow-none print:p-0">
-        {/* Background watermark */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none print:hidden"></div>
-
-        {/* Report Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6 print:border-black">
+      {/* MAIN REPORT CONTAINER */}
+      <div id="cyberguard-printable-report" className="soc-panel p-6 sm:p-8 space-y-6 print:border-none print:shadow-none print:p-0">
+        
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#263147] pb-4 print:border-black">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-cyan-950/50 border border-cyan-500/25 rounded-2xl flex items-center justify-center text-cyan-400 print:bg-slate-100 print:border-black shrink-0">
-              <Shield className="w-6 h-6" />
+            <div className="w-10 h-10 bg-[#181F2E] border border-[#263147] rounded-sm flex items-center justify-center text-[#00E5FF] shrink-0">
+              <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-xl font-bold font-display text-white print:text-black">
+              <h2 className="text-base font-bold font-display uppercase tracking-wider text-white print:text-black">
                 {scan.scanType === 'link' 
-                  ? 'CyberGuard Link Safety Report' 
+                  ? 'CyberGuard Link Reputation Briefing' 
                   : scan.scanType === 'image' 
-                  ? 'CyberGuard Visual Threat Report' 
-                  : 'CyberGuard Vulnerability Report'}
+                  ? 'CyberGuard Visual Artifact Briefing' 
+                  : 'CyberGuard Email Breach Briefing'}
               </h2>
-              <p className="text-xs font-mono text-slate-400 print:text-slate-600">ID: SEC-{scan.id.substring(0, 8).toUpperCase()} | Compiled: {new Date(scan.timestamp).toLocaleString()}</p>
+              <p className="text-xs font-mono text-[#7E8B9B]">
+                ID: SEC-{scan.id.substring(0, 10).toUpperCase()} | COMPILED: {new Date(scan.timestamp).toLocaleString()}
+              </p>
             </div>
           </div>
-          <div className="text-left sm:text-right">
-            <span className="text-[10px] uppercase font-mono tracking-widest text-slate-500 block">
-              {scan.scanType === 'link' ? 'Targeted Link URL' : scan.scanType === 'image' ? 'Target Screenshot File' : 'Target Email Endpoint'}
+          <div className="text-left sm:text-right font-mono text-xs">
+            <span className="text-[10px] uppercase text-[#7E8B9B] block font-bold">
+              {scan.scanType === 'link' ? 'TARGET LINK URL' : scan.scanType === 'image' ? 'TARGET SCREENSHOT FILE' : 'TARGET ENDPOINT EMAIL'}
             </span>
-            <span className="font-mono text-sm font-semibold text-cyan-400 print:text-cyan-800 break-all">
+            <span className="text-[#00E5FF] font-bold break-all">
               {scan.scanType === 'link' ? scan.targetLink : scan.scanType === 'image' ? scan.imageFileName : scan.targetEmail}
             </span>
           </div>
         </div>
 
-        {/* Hazard assessment grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Risk gauge card */}
-          <div className="bg-slate-950/30 border border-slate-800/50 rounded-2xl p-5 flex flex-col items-center justify-center text-center print:border-black print:bg-slate-50">
-            <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 mb-3">Threat Exposure Level</span>
-            <div className="relative w-28 h-28 flex items-center justify-center">
-              {/* Radial circle */}
-              <svg className="absolute w-full h-full -rotate-90">
-                <circle
-                  cx="56"
-                  cy="56"
-                  r="48"
-                  className="stroke-slate-800 fill-none print:stroke-slate-200"
-                  strokeWidth="8"
-                />
-                <circle
-                  cx="56"
-                  cy="56"
-                  r="48"
-                  className="stroke-cyan-500 fill-none"
-                  strokeWidth="8"
-                  strokeDasharray={2 * Math.PI * 48}
-                  strokeDashoffset={2 * Math.PI * 48 * (1 - scan.riskScore / 100)}
-                />
-              </svg>
-              <div className="flex flex-col items-center justify-center">
-                <span className="text-3xl font-mono font-extrabold text-white print:text-black">{scan.riskScore}</span>
-                <span className="text-[9px] uppercase font-semibold text-slate-500">of 100</span>
-              </div>
+        {/* Hazard Risk Meter & AI Executive Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="soc-panel p-4 flex flex-col justify-between space-y-3 font-mono">
+            <span className="text-[10px] uppercase text-[#7E8B9B] font-bold block">
+              Threat Exposure Rating
+            </span>
+            {renderBitDensityMeter(scan.riskScore)}
+            <div className="pt-2 border-t border-[#263147] text-[10px] text-[#7E8B9B]">
+              Calculated via CyberGuard Rule-Based Forensic Engine
             </div>
-            <span className={`mt-4 px-3 py-0.5 rounded-full text-[10px] font-bold font-mono tracking-wide border uppercase ${risk.color}`}>
-              {risk.label}
+          </div>
+
+          <div className="soc-panel p-4 md:col-span-2 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#00E5FF] font-mono uppercase">
+              <ShieldCheck className="w-4 h-4 text-[#00E5FF]" />
+              <span>Executive Forensic Summary</span>
+            </div>
+            <div className="text-xs text-[#ECEFF4] leading-relaxed font-mono whitespace-pre-wrap">
+              {scan.aiSummary || 'Forensic analysis completed.'}
+            </div>
+          </div>
+        </div>
+
+        {/* Breach Leak Instances or URL Threat Flags */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#7E8B9B] font-mono uppercase">
+            <AlertTriangle className="w-4 h-4 text-[#FF9900]" />
+            <span>
+              {scan.scanType === 'link' 
+                ? `Malicious URL Indicators (${scan.detectedThreats?.length || 0})` 
+                : scan.scanType === 'image' 
+                ? `Visual Threat Flags (${scan.detectedThreats?.length || 0})` 
+                : `Exposed Database Leaks (${scan.resultCount})`}
             </span>
           </div>
 
-          {/* AI generated Summary block */}
-          <div className="bg-slate-950/30 border border-slate-800/50 rounded-2xl p-5 md:col-span-2 print:border-black print:bg-slate-50 space-y-3">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-400 font-display print:text-cyan-800">
-              <ShieldCheck className="w-4 h-4 shrink-0 text-cyan-400" />
-              <span>CyberGuard Executive Threat Summary</span>
+          {scan.scanType === 'email' && scan.breaches.length > 0 && (
+            <div className="space-y-3 font-mono">
+              {scan.breaches.map((b) => (
+                <div key={b.id} className="border border-[#263147] bg-[#090D14] p-4 rounded-sm space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <strong className="text-white text-sm">{b.Title} ({b.Domain})</strong>
+                    <span className={`status-chip ${b.severity === 'critical' ? 'status-chip-critical' : 'status-chip-high'}`}>
+                      {b.severity}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#7E8B9B] leading-relaxed">{b.Description}</p>
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {b.DataClasses.map((item, idx) => (
+                      <span key={idx} className="bg-[#181F2E] border border-[#263147] text-[#00E5FF] text-[10px] px-2 py-0.5">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="text-xs text-slate-300 leading-relaxed space-y-2 whitespace-pre-wrap font-sans print:text-black">
-              {scan.aiSummary || 'Threat summary compiled.'}
+          )}
+
+          {scan.scanType !== 'email' && scan.detectedThreats && scan.detectedThreats.length > 0 && (
+            <div className="space-y-2 font-mono text-xs">
+              {scan.detectedThreats.map((threat, idx) => (
+                <div key={idx} className="border border-[#263147] bg-[#090D14] p-3 rounded-sm flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-[#00E5FF] shrink-0"></div>
+                  <span className="text-[#ECEFF4]">{threat}</span>
+                </div>
+              ))}
             </div>
-          </div>
-        </div>
-
-        {/* Found leak timeline details */}
-        <div className="space-y-4">
-          {scan.scanType === 'link' ? (
-            <>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 font-mono uppercase tracking-wider">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <span>Malicious URL Threat Indicators ({scan.detectedThreats?.length || 0})</span>
-              </div>
-
-              {(!scan.detectedThreats || scan.detectedThreats.length === 0 || scan.riskScore < 20) ? (
-                <div className="bg-emerald-950/10 border border-emerald-500/20 rounded-2xl p-6 text-center">
-                  <span className="text-emerald-400 font-semibold block text-sm">✓ Link Assessment Safe</span>
-                  <span className="text-xs text-slate-500 mt-1 block">No active brand spoofing, malicious obfuscation, or TLD threats detected on this link.</span>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {scan.detectedThreats.map((threat, idx) => (
-                    <div key={idx} className="bg-slate-950/30 border border-slate-800/40 rounded-2xl p-4 flex items-center gap-3 border-l-2 border-l-cyan-500 print:border-black print:bg-slate-50">
-                      <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0"></div>
-                      <span className="text-xs text-slate-300 font-mono print:text-black">{threat}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : scan.scanType === 'image' ? (
-            <>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 font-mono uppercase tracking-wider">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <span>Visual Social Engineering Threat Flags ({scan.detectedThreats?.length || 0})</span>
-              </div>
-
-              {(!scan.detectedThreats || scan.detectedThreats.length === 0 || scan.riskScore < 20) ? (
-                <div className="bg-emerald-950/10 border border-emerald-500/20 rounded-2xl p-6 text-center">
-                  <span className="text-emerald-400 font-semibold block text-sm">✓ Visual Diagnostics Clean</span>
-                  <span className="text-xs text-slate-500 mt-1 block">No phishing interfaces, urgent payment text, or malicious QR targets detected in this asset.</span>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {scan.detectedThreats.map((threat, idx) => (
-                    <div key={idx} className="bg-slate-950/30 border border-slate-800/40 rounded-2xl p-4 flex items-center gap-3 border-l-2 border-l-cyan-500 print:border-black print:bg-slate-50">
-                      <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0"></div>
-                      <span className="text-xs text-slate-300 font-mono print:text-black">{threat}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 font-mono uppercase tracking-wider">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <span>Identified Database Leak Instances ({scan.resultCount})</span>
-              </div>
-
-              {scan.breaches.length === 0 ? (
-                <div className="bg-emerald-950/10 border border-emerald-500/20 rounded-2xl p-6 text-center">
-                  <span className="text-emerald-400 font-semibold block text-sm">✓ Endpoint Integrity Intact</span>
-                  <span className="text-xs text-slate-500 mt-1 block">No matches found in known compromise archives. Your endpoint is secure.</span>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {scan.breaches.map((b) => (
-                    <div key={b.id} className="bg-slate-950/30 border border-slate-800/40 rounded-2xl p-5 flex flex-col sm:flex-row gap-4 items-start scan-line border-l-2 !border-slate-800/60 hover:!border-cyan-500 transition-colors print:border-black print:bg-slate-50">
-                      {b.LogoPath ? (
-                        <img
-                          src={b.LogoPath}
-                          alt={b.Title}
-                          referrerPolicy="no-referrer"
-                          className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-800/50 print:border-black"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-slate-400 text-sm">
-                          {b.Title.charAt(0)}
-                        </div>
-                      )}
-                      <div className="space-y-2 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="font-bold text-white text-sm print:text-black">{b.Title}</h4>
-                          <span className="text-[10px] font-mono text-slate-500">• {b.Domain} • Leaked: {b.BreachDate}</span>
-                          <span className={`ml-auto font-mono text-[9px] uppercase px-2 py-0.5 rounded-full font-bold border ${
-                            b.severity === 'critical'
-                              ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                              : b.severity === 'high'
-                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                              : 'bg-slate-950 text-slate-400 border-slate-800'
-                          }`}>
-                            {b.severity} severity
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 leading-relaxed print:text-black">{b.Description}</p>
-                        
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {b.DataClasses.map((item, idx) => (
-                            <span key={idx} className="bg-slate-900 text-slate-500 border border-slate-800 font-mono text-[9px] px-2 py-0.5 rounded-lg print:border-black print:text-black">
-                              {item}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
           )}
         </div>
 
-        {/* Security checklist footer */}
-        <div className="bg-cyan-950/5 border border-cyan-500/10 rounded-2xl p-5 print:border-black print:bg-slate-50">
-          <h4 className="font-bold text-xs text-cyan-400 font-display mb-3 flex items-center gap-1.5 print:text-cyan-800">
-            <CheckSquare className="w-4 h-4" />
-            {scan.scanType === 'link' 
-              ? 'Secure URL Navigation Countermeasures' 
-              : scan.scanType === 'image' 
-              ? 'Deceptive Visual Asset Protocols' 
-              : 'Vulnerability Countermeasures Guide'}
-          </h4>
-          <ul className="text-xs text-slate-400 space-y-2 print:text-black">
+        {/* Countermeasures Section */}
+        <div className="soc-panel p-4 space-y-3 font-mono text-xs">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#00E5FF] uppercase border-b border-[#263147] pb-2">
+            <CheckSquare className="w-4 h-4 text-[#00E5FF]" />
+            <span>Actionable Security Countermeasures</span>
+          </div>
+
+          <ul className="space-y-2 text-[11px] text-[#ECEFF4]">
             {scan.scanType === 'link' ? (
               <>
                 <li className="flex items-start gap-2">
-                  <span className="text-cyan-400 font-bold font-mono">1.</span>
-                  <span><strong>Do Not Authorize Session:</strong> Never type active API keys, MFA codes, or master credentials into unfamiliar redirect forms.</span>
+                  <span className="text-[#00E5FF] font-bold">1.</span>
+                  <span><strong>Do Not Authorize Session:</strong> Never type master passwords or MFA passcodes on suspicious domains.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-cyan-400 font-bold font-mono">2.</span>
-                  <span><strong>Inspect Host Domain:</strong> Always double-check domain spellings manually (e.g. paypaI vs paypal) in your browser address bar.</span>
+                  <span className="text-[#00E5FF] font-bold">2.</span>
+                  <span><strong>Inspect Host Domain:</strong> Manually confirm character spelling in browser address bar.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-cyan-400 font-bold font-mono">3.</span>
-                  <span><strong>Deploy Private Sandbox:</strong> Use private insulated browsers or specialized VPN tunnels if visiting brand-new or zero-reputation domains.</span>
+                  <span className="text-[#00E5FF] font-bold">3.</span>
+                  <span><strong>Deploy Private Sandbox:</strong> Test unknown links inside disposable browser containers.</span>
                 </li>
               </>
             ) : scan.scanType === 'image' ? (
               <>
                 <li className="flex items-start gap-2">
-                  <span className="text-cyan-400 font-bold font-mono">1.</span>
-                  <span><strong>Independent QR Scanning:</strong> Do not scan QR codes embedded in random screenshots or emails. Use secure link decoders first.</span>
+                  <span className="text-[#00E5FF] font-bold">1.</span>
+                  <span><strong>Avoid Unknown QR Links:</strong> Do not scan embedded QR codes from unsolicited attachments.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-cyan-400 font-bold font-mono">2.</span>
-                  <span><strong>Confirm Sender Authenticity:</strong> If the screenshot displays an invoice or emergency billing notice, verify with the vendor directly.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-cyan-400 font-bold font-mono">3.</span>
-                  <span><strong>Ignore Prompt Graphics:</strong> Be alert to graphic elements mimicking OS warnings, browser crash popups, or cloud sign-in triggers.</span>
+                  <span className="text-[#00E5FF] font-bold">2.</span>
+                  <span><strong>Verify Billing Invoices:</strong> Confirm emergency payment requests directly with vendor accounting.</span>
                 </li>
               </>
             ) : (
               <>
                 <li className="flex items-start gap-2">
-                  <span className="text-cyan-400 font-bold font-mono">1.</span>
-                  <span><strong>Separate Passwords:</strong> Never reuse master passwords. Use a secure offline password manager.</span>
+                  <span className="text-[#00E5FF] font-bold">1.</span>
+                  <span><strong>Enforce Password Vaults:</strong> Rotate compromised credentials using dedicated password managers.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-cyan-400 font-bold font-mono">2.</span>
-                  <span><strong>Strict MFA policies:</strong> Enforce software-based Authenticator apps rather than standard SMS codes where supported.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-cyan-400 font-bold font-mono">3.</span>
-                  <span><strong>Email Alias isolation:</strong> Use separate address aliases when registering on secondary untrusted websites.</span>
+                  <span className="text-[#00E5FF] font-bold">2.</span>
+                  <span><strong>Hardware MFA Keys:</strong> Migrate from SMS OTP to hardware-based FIDO2 authenticators.</span>
                 </li>
               </>
             )}
           </ul>
         </div>
 
-        {/* Printable Footer */}
-        <div className="hidden print:block text-center text-[9px] text-slate-500 pt-6 border-t border-dashed border-slate-300">
-          CyberGuard Cybersecurity Audit Report. Compiled securely using server-side Gemini threat intelligence pipelines.
-        </div>
       </div>
+
     </div>
   );
 }

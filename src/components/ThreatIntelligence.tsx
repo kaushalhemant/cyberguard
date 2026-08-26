@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, TrendingUp, RefreshCw, ShieldAlert, Bot, ChevronDown, ChevronUp, Globe, Activity, CheckCircle2, ShieldCheck } from 'lucide-react';
-import { motion } from 'motion/react';
-import { ThreatIntelligenceReport, ThreatIntelligenceAlert, PhishingTactic } from '../types';
-
+import { AlertTriangle, RefreshCw, ChevronDown, ChevronUp, Globe, Activity, ShieldCheck } from 'lucide-react';
+import { ThreatIntelligenceReport } from '../types';
 import { safeJsonResponse } from '../lib/api';
 
 interface ThreatIntelligenceProps {
@@ -48,218 +46,189 @@ export default function ThreatIntelligence({ token }: ThreatIntelligenceProps) {
   const getSeverityBadgeClass = (severity: string) => {
     switch (severity.toLowerCase()) {
       case 'critical':
-        return 'text-rose-400 bg-rose-500/10 border-rose-500/20';
+        return 'status-chip-critical';
       case 'high':
-        return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+        return 'status-chip-high';
       case 'medium':
-        return 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20';
+        return 'status-chip-medium';
       default:
-        return 'text-slate-400 bg-slate-500/10 border-slate-500/20';
-    }
-  };
-
-  const getTrendBadgeClass = (trend: string) => {
-    switch (trend.toLowerCase()) {
-      case 'surging':
-        return 'text-rose-400 bg-rose-500/10 border-rose-500/20';
-      case 'stable':
-        return 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20';
-      default:
-        return 'text-slate-400 bg-slate-500/10 border-slate-500/20';
+        return 'status-chip-low';
     }
   };
 
   return (
-    <div className="bento-card p-5 space-y-4">
+    <div className="soc-panel p-4 space-y-3 font-sans">
       {/* Header section with Refresh */}
-      <div className="flex items-start justify-between border-b border-slate-800 pb-3">
+      <div className="flex items-start justify-between border-b border-[#263147] pb-2">
         <div>
-          <div className="flex items-center gap-1.5 text-cyan-400 font-mono text-[10px] font-bold tracking-wider">
-            <Globe className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+          <div className="flex items-center gap-1.5 text-[#00E5FF] font-mono text-[10px] font-bold tracking-wider">
+            <Globe className="w-3.5 h-3.5 text-[#00E5FF]" />
             <span>GLOBAL THREAT RADAR</span>
-            <span className="bg-cyan-500/15 text-[8px] text-cyan-300 px-1.5 py-0.5 rounded flex items-center gap-1 font-sans">
-              <ShieldCheck className="w-2.5 h-2.5 text-cyan-400" />
-              CyberGuard Core
-            </span>
           </div>
-          <h3 className="font-bold text-sm text-white font-display mt-1">Global Threat Intelligence</h3>
-          <p className="text-[10px] text-slate-500 mt-0.5">Real-time global cybersecurity alerts & trending exploits.</p>
+          <h3 className="font-bold text-xs uppercase font-display text-white mt-0.5">Threat Intelligence Feed</h3>
         </div>
         <button
           onClick={fetchThreatIntelligence}
           disabled={loading}
-          className="text-slate-500 hover:text-cyan-400 transition-colors p-1.5 rounded-lg bg-slate-950/40 border border-slate-800 hover:border-cyan-500/20 disabled:opacity-50 cursor-pointer"
+          className="btn-soc p-1.5 text-[10px]"
           title="Refresh threat intelligence"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#00E5FF]' : ''}`} />
         </button>
       </div>
 
       {/* Tab Selectors */}
-      <div className="grid grid-cols-2 gap-1 bg-slate-950/40 p-1 rounded-xl border border-slate-900 text-[10px] font-mono font-bold">
+      <div className="grid grid-cols-2 gap-1 bg-[#090D14] p-1 border border-[#263147] text-[10px] font-mono font-bold">
         <button
           onClick={() => { setActiveTab('alerts'); setExpandedId(null); }}
-          className={`py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'alerts' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15' : 'text-slate-500 hover:text-slate-300 border border-transparent'}`}
+          className={`py-1 transition-colors cursor-pointer ${
+            activeTab === 'alerts' ? 'bg-[#181F2E] text-[#00E5FF] border border-[#263147]' : 'text-[#7E8B9B] hover:text-[#ECEFF4]'
+          }`}
         >
           ACTIVE ALERTS ({report?.alerts?.length || 0})
         </button>
         <button
           onClick={() => { setActiveTab('tactics'); setExpandedId(null); }}
-          className={`py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'tactics' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15' : 'text-slate-500 hover:text-slate-300 border border-transparent'}`}
+          className={`py-1 transition-colors cursor-pointer ${
+            activeTab === 'tactics' ? 'bg-[#181F2E] text-[#00E5FF] border border-[#263147]' : 'text-[#7E8B9B] hover:text-[#ECEFF4]'
+          }`}
         >
-          TRENDING EXPLOITS ({report?.phishingTactics?.length || 0})
+          EXPLOIT TACTICS ({report?.phishingTactics?.length || 0})
         </button>
       </div>
 
       {/* Core Feed Container */}
-      <div className="min-h-[220px] max-h-[350px] overflow-y-auto pr-1 space-y-3 scrollbar-thin">
+      <div className="min-h-[220px] max-h-[350px] overflow-y-auto pr-1 space-y-2 font-mono">
         {loading ? (
-          <div className="h-[220px] flex flex-col items-center justify-center space-y-3">
-            <div className="relative w-8 h-8">
-              <div className="absolute inset-0 rounded-full border-2 border-cyan-500/10"></div>
-              <div className="absolute inset-0 rounded-full border-2 border-t-cyan-400 animate-spin"></div>
-            </div>
-            <div className="text-center">
-              <span className="text-[10px] font-mono text-cyan-400/80 animate-pulse block uppercase tracking-wider">Syncing Neural Feeds...</span>
-              <span className="text-[8px] text-slate-600 font-mono">Grounded query in progress</span>
-            </div>
+          <div className="h-[220px] flex flex-col items-center justify-center space-y-2 text-xs text-[#00E5FF] animate-pulse">
+            <span>SYNCING NEURAL FEEDS...</span>
           </div>
         ) : error ? (
           <div className="h-[220px] flex flex-col items-center justify-center p-4 text-center space-y-2">
-            <AlertTriangle className="w-8 h-8 text-rose-500/80" />
-            <p className="text-[11px] text-slate-400">{error}</p>
+            <AlertTriangle className="w-6 h-6 text-[#FF334B]" />
+            <p className="text-[11px] text-[#7E8B9B]">{error}</p>
             <button
               onClick={fetchThreatIntelligence}
-              className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/25 px-3 py-1.5 rounded-xl font-mono text-[10px] font-bold cursor-pointer transition-colors"
+              className="btn-soc btn-soc-primary px-3 py-1 text-[10px]"
             >
-              Force Retry Sync
+              RETRY SYNC
             </button>
           </div>
         ) : activeTab === 'alerts' ? (
           /* ACTIVE ALERTS FEED */
           report?.alerts && report.alerts.length > 0 ? (
-            report.alerts.map((alert, index) => {
+            report.alerts.map((alert) => {
               const isExpanded = expandedId === alert.id;
               return (
-                <motion.div 
+                <div 
                   key={alert.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, ease: "easeOut", delay: index * 0.06 }}
-                  className={`bg-slate-950/45 border rounded-2xl p-3.5 transition-all space-y-2.5 ${isExpanded ? 'border-cyan-500/25 bg-slate-950/70' : 'border-slate-850 hover:border-slate-800'}`}
+                  className={`bg-[#090D14] border p-2.5 space-y-2 transition-colors ${
+                    isExpanded ? 'border-[#00E5FF] bg-[#181F2E]' : 'border-[#263147] hover:border-[#7E8B9B]'
+                  }`}
                 >
                   <div 
                     onClick={() => toggleExpand(alert.id)}
-                    className="flex items-start justify-between gap-2.5 cursor-pointer select-none"
+                    className="flex items-start justify-between gap-2 cursor-pointer select-none"
                   >
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-mono font-bold border ${getSeverityBadgeClass(alert.severity)}`}>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`status-chip ${getSeverityBadgeClass(alert.severity)}`}>
                           {alert.severity}
                         </span>
-                        <span className="text-[9px] text-slate-500 font-mono font-medium">{alert.category}</span>
+                        <span className="text-[9px] text-[#7E8B9B]">{alert.category}</span>
                       </div>
                       <h4 className="text-xs font-bold text-white leading-snug">{alert.title}</h4>
                     </div>
-                    <span className="text-slate-500 hover:text-slate-300 p-0.5 shrink-0">
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    <span className="text-[#7E8B9B]">
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </span>
                   </div>
 
                   {isExpanded && (
-                    <div className="pt-2 border-t border-slate-900/60 text-[11px] leading-relaxed text-slate-400 space-y-2.5 animate-slide-down">
+                    <div className="pt-2 border-t border-[#263147] text-[11px] text-[#ECEFF4] space-y-2">
                       <p>{alert.description}</p>
-                      
-                      <div className="grid grid-cols-1 gap-2 bg-slate-900/55 p-2 rounded-xl border border-slate-950">
+                      <div className="bg-[#090D14] p-2 border border-[#263147] space-y-1">
                         <div>
-                          <strong className="text-slate-300 text-[10px] block font-mono uppercase tracking-wider">💥 Potential Impact</strong>
-                          <span className="text-slate-400 text-[10px]">{alert.impact}</span>
+                          <strong className="text-[#7E8B9B] text-[9px] uppercase block">Impact Assessment</strong>
+                          <span className="text-[#ECEFF4] text-[10px]">{alert.impact}</span>
                         </div>
-                        <div className="pt-1.5 border-t border-slate-850/40">
-                          <strong className="text-cyan-400 text-[10px] block font-mono uppercase tracking-wider">🛠️ Recommended Action</strong>
-                          <span className="text-slate-300 text-[10px] font-medium">{alert.remediation}</span>
+                        <div className="pt-1 border-t border-[#263147]">
+                          <strong className="text-[#00E5FF] text-[9px] uppercase block">Mitigation Action</strong>
+                          <span className="text-[#ECEFF4] text-[10px]">{alert.remediation}</span>
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-1 text-[9px] text-slate-500 font-mono">
-                        <Activity className="w-3 h-3 text-cyan-500" />
-                        <span>Status: {alert.timestamp}</span>
                       </div>
                     </div>
                   )}
-                </motion.div>
+                </div>
               );
             })
           ) : (
-            <div className="h-[220px] flex items-center justify-center text-slate-500 text-[11px] font-mono">No active global alerts.</div>
+            <div className="h-[220px] flex items-center justify-center text-[#7E8B9B] text-[11px]">No active global alerts.</div>
           )
         ) : (
           /* PHISHING TACTICS FEED */
           report?.phishingTactics && report.phishingTactics.length > 0 ? (
-            report.phishingTactics.map((tactic, index) => {
+            report.phishingTactics.map((tactic) => {
               const isExpanded = expandedId === tactic.id;
               return (
-                <motion.div 
+                <div 
                   key={tactic.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, ease: "easeOut", delay: index * 0.06 }}
-                  className={`bg-slate-950/45 border rounded-2xl p-3.5 transition-all space-y-2.5 ${isExpanded ? 'border-cyan-500/25 bg-slate-950/70' : 'border-slate-850 hover:border-slate-800'}`}
+                  className={`bg-[#090D14] border p-2.5 space-y-2 transition-colors ${
+                    isExpanded ? 'border-[#00E5FF] bg-[#181F2E]' : 'border-[#263147] hover:border-[#7E8B9B]'
+                  }`}
                 >
                   <div 
                     onClick={() => toggleExpand(tactic.id)}
-                    className="flex items-start justify-between gap-2.5 cursor-pointer select-none"
+                    className="flex items-start justify-between gap-2 cursor-pointer select-none"
                   >
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-mono font-bold border ${getTrendBadgeClass(tactic.trendLevel)}`}>
-                          {tactic.trendLevel} Trend
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="status-chip status-chip-high">
+                          {tactic.trendLevel} TREND
                         </span>
-                        <span className="text-[9px] text-slate-500 font-mono font-medium">Targets: {tactic.targetAudience}</span>
+                        <span className="text-[9px] text-[#7E8B9B]">TARGETS: {tactic.targetAudience}</span>
                       </div>
                       <h4 className="text-xs font-bold text-white leading-snug">{tactic.name}</h4>
                     </div>
-                    <span className="text-slate-500 hover:text-slate-300 p-0.5 shrink-0">
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    <span className="text-[#7E8B9B]">
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </span>
                   </div>
 
                   {isExpanded && (
-                    <div className="pt-2 border-t border-slate-900/60 text-[11px] leading-relaxed text-slate-400 space-y-2.5 animate-slide-down">
+                    <div className="pt-2 border-t border-[#263147] text-[11px] text-[#ECEFF4] space-y-2">
                       <p>{tactic.description}</p>
-                      
-                      <div className="space-y-2 bg-slate-900/55 p-2.5 rounded-xl border border-slate-950">
+                      <div className="bg-[#090D14] p-2 border border-[#263147] space-y-1">
                         <div>
-                          <strong className="text-rose-400 text-[10px] block font-mono uppercase tracking-wider">⚠️ Critical Red Flags</strong>
-                          <ul className="list-disc pl-4 space-y-0.5 text-slate-400 text-[10px] mt-1">
-                            {tactic.redFlags.map((flag, index) => (
-                              <li key={index}>{flag}</li>
+                          <strong className="text-[#FF334B] text-[9px] uppercase block">Key Red Flags</strong>
+                          <ul className="list-disc pl-3 text-[10px] text-[#ECEFF4]">
+                            {tactic.redFlags.map((flag, idx) => (
+                              <li key={idx}>{flag}</li>
                             ))}
                           </ul>
                         </div>
-                        <div className="pt-2 border-t border-slate-850/40">
-                          <strong className="text-emerald-400 text-[10px] block font-mono uppercase tracking-wider">🛡️ Defensive Strategy</strong>
-                          <span className="text-slate-300 text-[10px] mt-1 block">{tactic.prevention}</span>
+                        <div className="pt-1 border-t border-[#263147]">
+                          <strong className="text-[#00E676] text-[9px] uppercase block">Defensive Strategy</strong>
+                          <span className="text-[#ECEFF4] text-[10px]">{tactic.prevention}</span>
                         </div>
                       </div>
                     </div>
                   )}
-                </motion.div>
+                </div>
               );
             })
           ) : (
-            <div className="h-[220px] flex items-center justify-center text-slate-500 text-[11px] font-mono">No phishing metrics found.</div>
+            <div className="h-[220px] flex items-center justify-center text-[#7E8B9B] text-[11px]">No exploit tactics recorded.</div>
           )
         )}
       </div>
 
-      {/* Footer / Status */}
       {report?.lastUpdated && !loading && (
-        <div className="border-t border-slate-900/60 pt-2 flex items-center justify-between text-[8px] font-mono text-slate-500">
-          <div className="flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-emerald-500" />
-            <span>Feed Secured</span>
-          </div>
+        <div className="border-t border-[#263147] pt-2 flex items-center justify-between text-[9px] font-mono text-[#7E8B9B]">
+          <span className="flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-[#00E676]" />
+            Feed Verified
+          </span>
           <span>Updated: {new Date(report.lastUpdated).toLocaleTimeString()}</span>
         </div>
       )}
