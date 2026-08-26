@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldCheck, ChevronLeft, Sun, Moon, Award } from 'lucide-react';
+import React, { useState } from 'react';
+import { ShieldCheck, ChevronLeft, Sun, Moon } from 'lucide-react';
 import { User, ScanResult } from './types';
 import Dashboard from './components/Dashboard';
 import ReportView from './components/ReportView';
-import AdminPanel from './components/AdminPanel';
 import { useTheme } from './components/ThemeProvider';
-import { safeJsonResponse } from './lib/api';
 
 const DEFAULT_OFFICIAL_USER: User = {
   id: 'usr_soc_official_master',
@@ -21,40 +19,10 @@ const DEFAULT_OFFICIAL_USER: User = {
 export default function App() {
   const { theme, toggleTheme } = useTheme();
   const [user, setUser] = useState<User>(DEFAULT_OFFICIAL_USER);
-  const [token, setToken] = useState<string>('cyberguard_soc_official_master_token_2026');
+  const [token] = useState<string>('cyberguard_soc_official_master_token_2026');
   const [gmailToken, setGmailToken] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'dashboard' | 'report' | 'admin'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'report'>('dashboard');
   const [selectedScan, setSelectedScan] = useState<ScanResult | null>(null);
-
-  // Sync session on mount if token exists
-  useEffect(() => {
-    const savedToken = localStorage.getItem('cyberguard_token');
-    const tokenToUse = savedToken || 'cyberguard_soc_official_master_token_2026';
-
-    const syncSession = async () => {
-      try {
-        const response = await fetch('/api/auth/me', {
-          headers: {
-            'Authorization': `Bearer ${tokenToUse}`
-          }
-        });
-        if (response.ok) {
-          const data = await safeJsonResponse(response);
-          if (data?.user) {
-            setUser(data.user);
-            setToken(tokenToUse);
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn('Session sync warning:', err);
-      }
-      setUser(DEFAULT_OFFICIAL_USER);
-      setToken('cyberguard_soc_official_master_token_2026');
-    };
-
-    syncSession();
-  }, []);
 
   const handleSelectReport = (scan: ScanResult) => {
     setSelectedScan(scan);
@@ -93,13 +61,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Active User Identity Badge */}
-          <div className="hidden md:flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl text-xs font-mono">
-            <Award className="w-4 h-4 text-sky-400" />
-            <span className="text-slate-300 max-w-[160px] truncate">{user.fullName || user.email}</span>
-            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-bold uppercase">VERIFIED</span>
-          </div>
-
           {/* Theme Toggle Button */}
           <button
             onClick={toggleTheme}
@@ -149,10 +110,8 @@ export default function App() {
             token={token}
             gmailToken={gmailToken}
             setGmailToken={setGmailToken}
-            onLogout={() => {}}
             onSelectReport={handleSelectReport}
             onUserUpdate={handleUserUpdate}
-            onNavigateAdmin={() => setActiveView('admin')}
           />
         )}
 
@@ -161,10 +120,6 @@ export default function App() {
             scan={selectedScan}
             onBack={() => setActiveView('dashboard')}
           />
-        )}
-
-        {activeView === 'admin' && (
-          <AdminPanel token={token} />
         )}
 
       </main>

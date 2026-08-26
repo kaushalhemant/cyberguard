@@ -28,10 +28,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Master Admin Security Configurations
-const ADMIN_MASTER_PASSCODE = getEnv('ADMIN_MASTER_KEY', 'CyberGuardMaster2026!');
 const JWT_SECRET = getEnv('JWT_SECRET', 'cyberguard-secure-secret-token-key-749');
-
-const ADMIN_JWT_SECRET = crypto.createHash('sha256').update(JWT_SECRET + '-admin-master').digest('hex');
 
 // HMAC-SHA256 based simple and robust Token helper for Users
 function generateToken(payload: object): string {
@@ -53,28 +50,6 @@ function verifyToken(token: string): any {
     return JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
   } catch {
     return null;
-  }
-}
-
-// Separate Master Admin Token Generator & Verifier
-function generateMasterAdminToken(): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const data = Buffer.from(JSON.stringify({ role: 'superadmin', iss: 'CyberGuard-Admin-Portal', iat: Date.now() })).toString('base64url');
-  const signature = crypto.createHmac('sha256', ADMIN_JWT_SECRET)
-    .update(`${header}.${data}`)
-    .digest('base64url');
-  return `${header}.${data}.${signature}`;
-}
-
-function verifyMasterAdminToken(token: string): boolean {
-  try {
-    const [header, data, signature] = token.split('.');
-    const expectedSig = crypto.createHmac('sha256', ADMIN_JWT_SECRET).update(`${header}.${data}`).digest('base64url');
-    if (signature !== expectedSig) return false;
-    const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
-    return payload.role === 'superadmin';
-  } catch {
-    return false;
   }
 }
 
@@ -822,59 +797,7 @@ app.get('/api/payment/config', (req, res) => {
   });
 });
 
-// ----------------------------------------------------
-// STANDALONE MASTER ADMIN PORTAL ENDPOINTS & SECURITY
-// ----------------------------------------------------
-
-function verifyMasterAdmin(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    db.logSystemEvent('warn', 'ADMIN_AUTH', 'Master admin token missing', { ip }).catch(() => {});
-    return res.status(401).json({ error: 'Master Admin authentication required' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  if (!verifyMasterAdminToken(token)) {
-    db.logSystemEvent('error', 'ADMIN_AUTH_REJECTED', 'Master admin token invalid or tampered', { ip }).catch(() => {});
-    return res.status(403).json({ error: 'Master Admin access denied. Invalid or expired token.' });
-  }
-
-  next();
-}
-
-app.post('/api/admin/login', async (req: Request, res: Response) => {
-  const { passcode } = req.body;
-  const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-
-  if (isRateLimited(ip, 'admin_login', 5, 15 * 60 * 1000)) {
-    await db.logSystemEvent('error', 'ADMIN_BRUTEFORCE_BLOCKED', 'Too many failed passcode attempts', { ip });
-    return res.status(429).json({ error: 'Too many login attempts. Access temporarily locked.' });
-  }
-
-  if (!passcode || passcode.trim() !== ADMIN_MASTER_PASSCODE) {
-    await db.logSystemEvent('warn', 'ADMIN_LOGIN_FAILED', 'Incorrect Master Admin passcode entered', { ip });
-    return res.status(401).json({ error: 'Invalid Master Admin passcode.' });
-  }
-
-  const adminToken = generateMasterAdminToken();
-  await db.logSystemEvent('info', 'ADMIN_LOGIN_SUCCESS', 'Master Admin authenticated successfully', { ip });
-
-  res.json({
-    success: true,
-    token: adminToken,
-    expiresIn: '24h'
-  });
-});
-
-app.get('/api/admin/logs', verifyMasterAdmin, async (req: Request, res: Response) => {
-  const activityLogs = await db.getActivityLogs(300);
-  const systemLogs = await db.getSystemLogs(300);
-  res.json({ activityLogs, systemLogs });
-});
-
-// Telemetry & Audit Logs Endpoint for Vercel/Admins
+// Telemetry & Audit Logs Endpoint
 app.get('/api/logs', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const activityLogs = await db.getActivityLogs(200);
@@ -882,45 +805,6 @@ app.get('/api/logs', authenticate, async (req: AuthenticatedRequest, res: Respon
     res.json({ success: true, activityLogs, systemLogs });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch telemetry logs.' });
-  }
-});
-
-app.get('/api/admin/system-stats', verifyMasterAdmin, async (req: Request, res: Response) => {
-  const memoryUsage = process.memoryUsage();
-  const users = await db.getAllUsers();
-  const activityLogs = await db.getActivityLogs(1000);
-  const systemLogs = await db.getSystemLogs(1000);
-
-  res.json({
-    status: 'OPTIMAL_OPERATIONAL',
-    uptimeSeconds: Math.floor(process.uptime()),
-    memoryMb: {
-      rss: (memoryUsage.rss / 1024 / 1024).toFixed(2),
-      heapTotal: (memoryUsage.heapTotal / 1024 / 1024).toFixed(2),
-      heapUsed: (memoryUsage.heapUsed / 1024 / 1024).toFixed(2),
-    },
-    nodeVersion: process.version,
-    platform: process.platform,
-    totalUsers: users.length,
-    totalActivityLogs: activityLogs.length,
-    totalSystemLogs: systemLogs.length,
-    users
-  });
-});
-
-app.get('/api/admin/stats', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const users = await db.getAllUsers();
-    res.json({
-      totalUsers: users.length,
-      proUsers: users.length,
-      freeUsers: 0,
-      pendingPayments: 0,
-      totalRevenue: 0,
-      users
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to retrieve admin stats' });
   }
 });
 

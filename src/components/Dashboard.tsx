@@ -12,10 +12,8 @@ interface DashboardProps {
   token: string;
   gmailToken: string | null;
   setGmailToken: (token: string | null) => void;
-  onLogout: () => void;
   onSelectReport: (scan: ScanResult) => void;
   onUserUpdate: (updatedUser: User) => void;
-  onNavigateAdmin: () => void;
 }
 
 export default function Dashboard({
@@ -23,10 +21,8 @@ export default function Dashboard({
   token,
   gmailToken,
   setGmailToken,
-  onLogout,
   onSelectReport,
-  onUserUpdate,
-  onNavigateAdmin
+  onUserUpdate
 }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<'email' | 'link' | 'image' | 'cve' | 'osint' | 'hash' | 'siem' | 'stix'>('email');
   const [scanEmail, setScanEmail] = useState('');
@@ -1656,134 +1652,11 @@ export default function Dashboard({
 
       </div>
 
-      {/* RIGHT PANEL (Payment & Coming Soon transparency) */}
+      {/* RIGHT PANEL */}
       <div className="space-y-6">
         
-        {/* User Account / Admin Panel Launcher */}
-        <div className="bento-card p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-white text-xs">
-              {user.email.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <span className="text-xs font-bold text-white block truncate max-w-[130px]">{user.email}</span>
-              <span className="text-[9px] font-mono uppercase text-emerald-400 block tracking-wider font-semibold">Status: Active</span>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-1.5">
-            {user.role === 'admin' && (
-              <button
-                onClick={onNavigateAdmin}
-                className="bg-cyan-950/50 hover:bg-cyan-900/50 text-cyan-400 border border-cyan-500/20 px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono cursor-pointer"
-              >
-                ADMIN CONSOLE
-              </button>
-            )}
-            <button
-              onClick={onLogout}
-              className="text-slate-500 hover:text-rose-400 transition-colors p-1.5"
-              title="Logout session"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
         {/* Threat Intelligence Side Panel */}
         <ThreatIntelligence token={token} />
-
-        {/* Razorpay Payments Container moved to bottom */}
-
-        {/* Aspirational Coming Soon Suite (Option A - Honest Transparency) */}
-        <div className="bento-card p-5 space-y-4">
-          <div className="border-b border-slate-800 pb-2.5">
-            <h3 className="font-bold text-xs text-white uppercase tracking-wider font-mono">🎯 CyberGuard Roadmap (Coming Soon)</h3>
-            <p className="text-[10px] text-slate-500 mt-0.5">Honest roadmap tracking of advanced features currently in development.</p>
-          </div>
-
-          <div className="space-y-3.5">
-            {/* Dark Web Monitoring */}
-            <div className="flex items-start gap-2.5">
-              <div className="w-6 h-6 bg-slate-950 rounded border border-slate-800 flex items-center justify-center text-slate-600 shrink-0 mt-0.5">
-                <Cpu className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1.5">
-                  <h4 className="text-xs font-bold text-slate-300 truncate">24/7 Dark Web Monitor</h4>
-                  <span className="shrink-0 status-tag status-soon">Roadmap</span>
-                </div>
-                <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
-                  Automatic background crawlers tracking hacker forums and paste sites for credential dumps.
-                </p>
-              </div>
-            </div>
-
-            {/* Real-time Alerts */}
-            <div className="flex items-start gap-2.5">
-              <div className="w-6 h-6 bg-slate-950 rounded border border-slate-800 flex items-center justify-center text-slate-600 shrink-0 mt-0.5">
-                <Bell className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1.5">
-                  <h4 className="text-xs font-bold text-slate-300 truncate">Real-time Push Alerts</h4>
-                  <span className="shrink-0 status-tag status-soon">Roadmap</span>
-                </div>
-                <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
-                  Push notifications and SMS texts immediately when your scanned address is leaked.
-                </p>
-              </div>
-            </div>
-
-            {/* Developer API */}
-            <div className="flex items-start gap-2.5">
-              <div className="w-6 h-6 bg-slate-950 rounded border border-slate-800 flex items-center justify-center text-slate-600 shrink-0 mt-0.5">
-                <Lock className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1.5">
-                  <h4 className="text-xs font-bold text-slate-300 truncate">Developer API Keys</h4>
-                  <span className="shrink-0 status-tag status-soon">Roadmap</span>
-                </div>
-                <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
-                  Generate secure authorization bearer keys to query our breach endpoint from custom scripts.
-                </p>
-              </div>
-            </div>
-
-            {/* Password Hash analysis */}
-            <div className="flex items-start gap-2.5">
-              <div className="w-6 h-6 bg-slate-950 rounded border border-slate-800 flex items-center justify-center text-slate-600 shrink-0 mt-0.5">
-                <Shield className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1.5">
-                  <h4 className="text-xs font-bold text-slate-300 truncate">Entropy Hash Analyzer</h4>
-                  <span className="shrink-0 status-tag status-soon">Roadmap</span>
-                </div>
-                <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
-                  Evaluate decryption feasibility, hashing salts, and entropy indices for passwords in leaked databases.
-                </p>
-              </div>
-            </div>
-
-            {/* Family Protection */}
-            <div className="flex items-start gap-2.5">
-              <div className="w-6 h-6 bg-slate-950 rounded border border-slate-800 flex items-center justify-center text-slate-600 shrink-0 mt-0.5">
-                <Users className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1.5">
-                  <h4 className="text-xs font-bold text-slate-300 truncate">Family Protection (3/10)</h4>
-                  <span className="shrink-0 status-tag status-soon">Roadmap</span>
-                </div>
-                <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
-                  Register up to 10 email addresses under one family Pro plan to share scan metrics.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Trust, Privacy & Compliance Center */}
         <div className="bento-card p-5 space-y-4">
