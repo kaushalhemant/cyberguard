@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Terminal as TerminalIcon } from 'lucide-react';
 import { TerminalLog } from '../types';
+import { safeJsonResponse } from '../lib/api';
 
 export default function Terminal() {
   const [logs, setLogs] = useState<TerminalLog[]>([
@@ -29,34 +30,42 @@ export default function Terminal() {
   }, [logs]);
 
   const addLog = (text: string, type: TerminalLog['type'] = 'output') => {
-    const newLog: TerminalLog = {
-      id: Math.random().toString(36).substring(7),
-      text,
-      type,
-      timestamp: new Date().toLocaleTimeString()
-    };
-    setLogs(prev => [...prev, newLog]);
+    setLogs(prev => [
+      ...prev,
+      {
+        id: Math.random().toString(),
+        text,
+        type,
+        timestamp: new Date().toLocaleTimeString()
+      }
+    ]);
   };
 
-  const handleCommand = (cmdStr: string) => {
-    const trimmed = cmdStr.trim();
-    if (!trimmed) return;
+  const handleCommand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
 
-    addLog(`$ ${trimmed}`, 'command');
+    const cmd = input.trim();
+    addLog(`cyberguard@soc-mesh:~$ ${cmd}`, 'command');
+    setInput('');
 
-    const args = trimmed.split(' ');
-    const command = args[0].toLowerCase();
+    const args = cmd.split(' ');
+    const mainCommand = args[0].toLowerCase();
 
-    switch (command) {
+    switch (mainCommand) {
       case 'help':
-        addLog('CyberGuard Official SOC Security Commands:', 'success');
-        addLog('  cve <query>               - Search NIST NVD CVE vulnerability records by keyword', 'output');
-        addLog('  osint <ip/domain>         - Perform deep OSINT IP forensic inspection & port audit', 'output');
-        addLog('  hash <sha256/md5>         - Analyze malware binary hash, entropy & YARA matches', 'output');
-        addLog('  scan <email>              - Run deep breach search on target email', 'output');
-        addLog('  stix <target>             - Generate STIX 2.1 evidence bundle JSON', 'output');
-        addLog('  sys-info                  - Display SOC system telemetry & runtime stats', 'output');
-        addLog('  clear                     - Clear the terminal screen buffer', 'output');
+        addLog('Available Operational Commands:', 'output');
+        addLog('  scan <email>       - Execute automated breach database lookup', 'output');
+        addLog('  cve <keyword>      - Query live NIST NVD vulnerability records', 'output');
+        addLog('  osint <ip/domain>  - Resolve IP/domain reputation & blacklist records', 'output');
+        addLog('  hash <hash>        - Perform PE payload entropy & malware signature inspection', 'output');
+        addLog('  stix <target>      - Generate OASIS STIX 2.1 DFIR evidence bundle', 'output');
+        addLog('  sys-info           - Query real-time CyberGuard SOC Engine telemetry', 'output');
+        addLog('  clear              - Purge command history terminal buffer', 'output');
+        break;
+
+      case 'clear':
+        setLogs([]);
         break;
 
       case 'cve':
@@ -68,7 +77,7 @@ export default function Terminal() {
         }
         addLog(`[~] Querying NIST NVD CVE records for: "${query}"...`, 'output');
         fetch(`/api/cve/search?query=${encodeURIComponent(query)}&limit=5`)
-          .then(res => res.json())
+          .then(res => safeJsonResponse(res, 'CVE query failed'))
           .then(data => {
             if (!data.cves || data.cves.length === 0) {
               addLog(`[-] No CVE records found matching "${query}".`, 'error');
@@ -96,7 +105,7 @@ export default function Terminal() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target })
         })
-          .then(res => res.json())
+          .then(res => safeJsonResponse(res, 'OSINT inspection failed'))
           .then(data => {
             if (data.error) {
               addLog(`[-] OSINT error: ${data.error}`, 'error');
@@ -123,7 +132,7 @@ export default function Terminal() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hash: h })
         })
-          .then(res => res.json())
+          .then(res => safeJsonResponse(res, 'Malware hash forensics failed'))
           .then(data => {
             if (data.error) {
               addLog(`[-] Hash error: ${data.error}`, 'error');
@@ -150,7 +159,7 @@ export default function Terminal() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email })
         })
-          .then(res => res.json())
+          .then(res => safeJsonResponse(res, 'Email breach assessment failed'))
           .then(data => {
             if (data.error) {
               addLog(`[-] Scan error: ${data.error}`, 'error');
@@ -171,10 +180,11 @@ export default function Terminal() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target })
         })
-          .then(res => res.json())
+          .then(res => safeJsonResponse(res, 'STIX export failed'))
           .then(data => {
-            if (data.stixBundle) {
-              addLog(`[+] Generated STIX 2.1 Bundle ID: ${data.stixBundle.id} (Spec: 2.1)`, 'success');
+            if (data.stixBundle || data.bundle) {
+              const bundle = data.stixBundle || data.bundle;
+              addLog(`[+] Generated STIX 2.1 Bundle ID: ${bundle.id} (Spec: 2.1)`, 'success');
             }
           })
           .catch(err => addLog(`[-] STIX export failed: ${err.message}`, 'error'));
@@ -189,12 +199,8 @@ export default function Terminal() {
         break;
       }
 
-      case 'clear':
-        setLogs([]);
-        break;
-
       default:
-        addLog(`Command not recognized: "${command}". Type "help" for a list of available commands.`, 'error');
+        addLog(`Command not recognized: "${mainCommand}". Type "help" for a list of available commands.`, 'error');
         break;
     }
   };

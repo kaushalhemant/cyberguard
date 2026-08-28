@@ -319,8 +319,9 @@ export default function Dashboard({
       if (data) {
         setCveResults(data);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('CVE search error:', err);
+      setError(err.message || 'CVE vulnerability query failed.');
     } finally {
       setCveLoading(false);
     }
@@ -334,6 +335,7 @@ export default function Dashboard({
   const executeOsintLookup = async (target: string) => {
     if (!target) return;
     setOsintLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/soc/osint-lookup', {
         method: 'POST',
@@ -344,6 +346,7 @@ export default function Dashboard({
       if (data) setOsintResult(data);
     } catch (err: any) {
       console.warn('OSINT lookup error:', err);
+      setError(err.message || 'OSINT lookup failed.');
     } finally {
       setOsintLoading(false);
     }
@@ -357,6 +360,7 @@ export default function Dashboard({
   const executeHashLookup = async (hash: string, fileName?: string) => {
     if (!hash) return;
     setHashLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/soc/hash-lookup', {
         method: 'POST',
@@ -367,6 +371,7 @@ export default function Dashboard({
       if (data) setHashResult(data);
     } catch (err: any) {
       console.warn('Hash lookup error:', err);
+      setError(err.message || 'Malware hash forensics failed.');
     } finally {
       setHashLoading(false);
     }
@@ -390,20 +395,23 @@ export default function Dashboard({
           note: triageNote
         })
       });
-      const data = await safeJsonResponse(res);
+      const data = await safeJsonResponse(res, 'SIEM triage update failed');
       if (data?.incident) {
         setSelectedIncident(data.incident);
         setIncidentsList(prev => prev.map(inc => inc.id === data.incident.id ? data.incident : inc));
         setTriageNote('');
+        notifyCopy('Incident status updated');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('SIEM triage error:', err);
+      setError(err.message || 'Failed to update SIEM incident.');
     }
   };
 
   const handleStixExport = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setStixLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/soc/stix-export', {
         method: 'POST',
@@ -414,10 +422,14 @@ export default function Dashboard({
           notes: stixNotes || 'Forensic threat indicator extracted via CyberGuard Workstation'
         })
       });
-      const data = await safeJsonResponse(res);
-      if (data?.stixBundle) setStixBundleResult(data.stixBundle);
-    } catch (err) {
+      const data = await safeJsonResponse(res, 'STIX 2.1 generation failed');
+      if (data?.stixBundle || data?.bundle) {
+        setStixBundleResult(data.stixBundle || data.bundle);
+        notifyCopy('STIX 2.1 JSON Generated');
+      }
+    } catch (err: any) {
       console.warn('STIX export error:', err);
+      setError(err.message || 'STIX 2.1 generation error.');
     } finally {
       setStixLoading(false);
     }

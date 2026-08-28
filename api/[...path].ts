@@ -81,8 +81,80 @@ let memoryIncidents = [
   }
 ];
 
+/**
+ * Robust request body parser that handles parsed objects, JSON strings, Buffers, and stream buffering.
+ */
+async function parseRequestBody(req: any): Promise<any> {
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+      return req.body;
+    }
+    if (typeof req.body === 'string') {
+      try {
+        return JSON.parse(req.body);
+      } catch {
+        return { rawText: req.body };
+      }
+    }
+    if (Buffer.isBuffer(req.body)) {
+      try {
+        return JSON.parse(req.body.toString('utf8'));
+      } catch {
+        return { rawBuffer: req.body };
+      }
+    }
+  }
+
+  // If body is a stream (e.g. raw Node HTTP request)
+  if (typeof req.on === 'function') {
+    return new Promise((resolve) => {
+      let data = '';
+      req.on('data', (chunk: any) => {
+        data += chunk;
+      });
+      req.on('end', () => {
+        try {
+          resolve(data ? JSON.parse(data) : {});
+        } catch {
+          resolve({ rawText: data });
+        }
+      });
+      req.on('error', () => {
+        resolve({});
+      });
+    });
+  }
+
+  return {};
+}
+
+/**
+ * Robust path normalizer that resolves the target route regardless of whether
+ * req.query.path is an array, string, or omitted.
+ */
+function resolveRoutePath(req: any): { route: string; segments: string[] } {
+  const queryPath = req.query?.path;
+  let segments: string[] = [];
+
+  if (Array.isArray(queryPath)) {
+    segments = queryPath.map(s => String(s).trim()).filter(Boolean);
+  } else if (typeof queryPath === 'string' && queryPath.trim()) {
+    segments = queryPath.trim().split('/').filter(Boolean);
+  }
+
+  // If query.path was empty or missing, fallback to parsing req.url
+  if (segments.length === 0 && req.url) {
+    const cleanUrl = req.url.split('?')[0].split('#')[0];
+    const pathWithoutPrefix = cleanUrl.replace(/^\/api\/?/, '').replace(/^\//, '');
+    segments = pathWithoutPrefix.split('/').filter(Boolean);
+  }
+
+  const route = segments.join('/').toLowerCase();
+  return { route, segments };
+}
+
 export default async function handler(req: any, res: any) {
-  // CORS Headers
+  // 1. CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -90,27 +162,31 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
-  // Parse path segments
-  const pathParam = req.query?.path;
-  const pathArray: string[] = Array.isArray(pathParam) 
-    ? pathParam 
-    : (typeof pathParam === 'string' ? pathParam.split('/') : []);
-  
-  const rawUrl = (req.url || '').split('?')[0];
-  const urlSegments = rawUrl.replace(/^\/api\/?/, '').replace(/^\//, '').split('/').filter(Boolean);
-  const segments = pathArray.length > 0 ? pathArray : urlSegments;
-  const route = segments.join('/');
+  // 2. Resolve Route & Log Request for Vercel Runtime Logs
+  const { route, segments } = resolveRoutePath(req);
+  const method = (req.method || 'GET').toUpperCase();
 
-  const method = req.method;
-  const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+  console.log(`[CyberGuard API] ${method} URL="${req.url}" QueryPath=${JSON.stringify(req.query?.path)} -> ResolvedRoute="/api/${route}"`);
+
+  // 3. Parse Request Body
+  const body = await parseRequestBody(req);
 
   try {
-    // 1. Healthcheck: /api/health or /api
+    // -----------------------------------------------------------------
+    // ROUTE 1: Healthcheck -> /api/health or /api
+    // -----------------------------------------------------------------
     if (route === 'health' || route === '') {
-      return res.status(200).json({ status: 'ok', server: 'CyberGuard Unified Serverless Hub', timestamp: new Date().toISOString() });
+      return res.status(200).json({
+        status: 'ok',
+        server: 'CyberGuard Unified Serverless Hub',
+        timestamp: new Date().toISOString(),
+        resolvedRoute: `/api/${route}`
+      });
     }
 
-    // 2. Auth: /api/auth/me or /api/auth/login
+    // -----------------------------------------------------------------
+    // ROUTE 2: Authentication -> /api/auth/me or /api/auth/login
+    // -----------------------------------------------------------------
     if (route === 'auth/me' || route === 'auth') {
       return res.status(200).json({ user: MASTER_USER });
     }
@@ -118,12 +194,17 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ user: MASTER_USER, token: 'cyberguard-session-jwt-token' });
     }
 
-    // 3. Email Breach Audit: /api/scan
+    // -----------------------------------------------------------------
+    // ROUTE 3: Email Breach Assessment -> /api/scan
+    // -----------------------------------------------------------------
     if (route === 'scan') {
-      if (method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-      const email = body.email;
+      if (method !== 'POST') {
+        return res.status(405).json({ error: `Method ${method} Not Allowed for /api/scan. Expected POST.` });
+      }
+
+      const email = body.email || body.targetEmail;
       if (!email || typeof email !== 'string' || !email.includes('@')) {
-        return res.status(400).json({ error: 'Please provide a valid email address.' });
+        return res.status(400).json({ error: 'Please provide a valid target email address in JSON body ({ email: "..." }).' });
       }
 
       const cleanEmail = email.trim().toLowerCase();
@@ -161,12 +242,17 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ scan: scanRecord, user: MASTER_USER });
     }
 
-    // 4. Link & URL Threat Scanner: /api/scan-link
+    // -----------------------------------------------------------------
+    // ROUTE 4: URL & Phishing Threat Scanner -> /api/scan-link
+    // -----------------------------------------------------------------
     if (route === 'scan-link') {
-      if (method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-      const url = body.url;
+      if (method !== 'POST') {
+        return res.status(405).json({ error: `Method ${method} Not Allowed for /api/scan-link. Expected POST.` });
+      }
+
+      const url = body.url || body.targetUrl || body.link;
       if (!url || typeof url !== 'string') {
-        return res.status(400).json({ error: 'Target URL is required' });
+        return res.status(400).json({ error: 'Target URL is required in JSON body ({ url: "https://..." }).' });
       }
 
       const analysis = await analyzeUrl(url);
@@ -188,21 +274,28 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ scan: scanRecord, user: MASTER_USER });
     }
 
-    // 5. Visual & File Payload Inspector: /api/scan-image
+    // -----------------------------------------------------------------
+    // ROUTE 5: Visual & File Payload Inspector -> /api/scan-image
+    // -----------------------------------------------------------------
     if (route === 'scan-image') {
-      if (method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-      const { imageBase64, filename } = body;
-      if (!imageBase64 || typeof imageBase64 !== 'string') {
-        return res.status(400).json({ error: 'Valid image base64 is required' });
+      if (method !== 'POST') {
+        return res.status(405).json({ error: `Method ${method} Not Allowed for /api/scan-image. Expected POST.` });
       }
 
-      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      const base64Input = body.base64Image || body.imageBase64 || body.image || body.file;
+      const filename = body.filename || body.fileName || 'uploaded_payload.png';
+
+      if (!base64Input || typeof base64Input !== 'string') {
+        return res.status(400).json({ error: 'Valid base64 image data is required in JSON body ({ base64Image: "..." }).' });
+      }
+
+      const cleanBase64 = base64Input.replace(/^data:image\/\w+;base64,/, '');
       const buffer = Buffer.from(cleanBase64, 'base64');
       const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
       const md5 = crypto.createHash('md5').update(buffer).digest('hex');
 
-      const fname = (filename || 'uploaded_payload.png').toLowerCase();
-      const isMaliciousLure = fname.includes('invoice') || fname.includes('payment') || fname.includes('urgent') || fname.includes('remittance');
+      const fname = filename.toLowerCase();
+      const isMaliciousLure = fname.includes('invoice') || fname.includes('payment') || fname.includes('urgent') || fname.includes('remittance') || fname.includes('wire');
 
       const score = isMaliciousLure ? 75 : 15;
       const threats = isMaliciousLure 
@@ -210,7 +303,7 @@ export default async function handler(req: any, res: any) {
         : ['Clean image payload baseline', 'No anomalous embedded scripts found'];
 
       const aiSummary = `### 🖼️ Visual & File Payload Forensic Inspection\n\n` +
-        `**Inspected Asset**: \`${filename || 'uploaded_file'}\`  \n` +
+        `**Inspected Asset**: \`${filename}\`  \n` +
         `**SHA-256 Hash**: \`${sha256}\`  \n` +
         `**MD5 Hash**: \`${md5}\`  \n` +
         `**Risk Rating**: **${score}/100** (${score >= 50 ? '🚨 HIGH RISK LURE' : '🟢 CLEAN PAYLOAD'})\n\n` +
@@ -226,7 +319,7 @@ export default async function handler(req: any, res: any) {
         riskScore: score,
         aiSummary,
         scanType: 'image',
-        targetImage: filename || 'inspection_artifact.png',
+        targetImage: filename,
         detectedThreats: threats
       };
 
@@ -235,67 +328,96 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ scan: scanRecord, user: MASTER_USER });
     }
 
-    // 6. NIST CVE Search: /api/cve/search
+    // -----------------------------------------------------------------
+    // ROUTE 6: NIST CVE Search -> /api/cve/search
+    // -----------------------------------------------------------------
     if (route === 'cve/search') {
-      const query = (req.query?.query as string) || '';
-      const severity = (req.query?.severity as string) || 'ALL';
-      const limit = parseInt((req.query?.limit as string) || '20', 10);
+      const query = (req.query?.query as string) || (body.query as string) || '';
+      const severity = (req.query?.severity as string) || (body.severity as string) || 'ALL';
+      const limit = parseInt((req.query?.limit as string) || (body.limit as string) || '20', 10);
       const result = await searchCves(query, severity, limit);
       return res.status(200).json(result);
     }
 
-    // 7. Latest CVEs: /api/cve/latest
+    // -----------------------------------------------------------------
+    // ROUTE 7: Latest CVE Vulnerabilities -> /api/cve/latest
+    // -----------------------------------------------------------------
     if (route === 'cve/latest') {
-      const limit = parseInt((req.query?.limit as string) || '12', 10);
+      const limit = parseInt((req.query?.limit as string) || (body.limit as string) || '12', 10);
       return res.status(200).json({
         totalMatches: PREINDEXED_CVES.length,
         cves: PREINDEXED_CVES.slice(0, limit)
       });
     }
 
-    // 8. OSINT IP & Domain Lookup: /api/soc/osint-lookup
+    // -----------------------------------------------------------------
+    // ROUTE 8: OSINT IP & Domain Inspector -> /api/soc/osint-lookup
+    // -----------------------------------------------------------------
     if (route === 'soc/osint-lookup') {
-      if (method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-      const target = body.target;
-      if (!target || typeof target !== 'string') {
-        return res.status(400).json({ error: 'Valid target IP or domain is required' });
+      if (method !== 'POST') {
+        return res.status(405).json({ error: `Method ${method} Not Allowed for /api/soc/osint-lookup. Expected POST.` });
       }
+
+      const target = body.target || body.ip || body.domain;
+      if (!target || typeof target !== 'string') {
+        return res.status(400).json({ error: 'Valid IP address or domain target is required in JSON body ({ target: "..." }).' });
+      }
+
       const result = await analyzeOsint(target);
       return res.status(200).json(result);
     }
 
-    // 9. Malware Hash Lookup: /api/soc/hash-lookup
+    // -----------------------------------------------------------------
+    // ROUTE 9: Malware Hash Forensics -> /api/soc/hash-lookup
+    // -----------------------------------------------------------------
     if (route === 'soc/hash-lookup') {
-      if (method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-      const { hash, fileName } = body;
-      if (!hash || typeof hash !== 'string') {
-        return res.status(400).json({ error: 'Valid hash string is required' });
+      if (method !== 'POST') {
+        return res.status(405).json({ error: `Method ${method} Not Allowed for /api/soc/hash-lookup. Expected POST.` });
       }
+
+      const hash = body.hash || body.fileHash;
+      const fileName = body.fileName || body.filename;
+
+      if (!hash || typeof hash !== 'string') {
+        return res.status(400).json({ error: 'Valid hash string (MD5, SHA-1, SHA-256) is required in JSON body ({ hash: "..." }).' });
+      }
+
       const result = await analyzeHash(hash, fileName);
       return res.status(200).json(result);
     }
 
-    // 10. SIEM Incidents: /api/soc/incidents
+    // -----------------------------------------------------------------
+    // ROUTE 10: SIEM Incidents List -> /api/soc/incidents
+    // -----------------------------------------------------------------
     if (route === 'soc/incidents') {
       return res.status(200).json({ incidents: memoryIncidents });
     }
 
-    // 11. Incident Triage: /api/soc/incidents/:id/triage
+    // -----------------------------------------------------------------
+    // ROUTE 11: Incident Triage Action -> /api/soc/incidents/:id/triage
+    // -----------------------------------------------------------------
     if (route.startsWith('soc/incidents/') && route.endsWith('/triage')) {
-      const id = route.split('/')[2];
+      const incidentId = segments[2];
       const { status, containmentAction, note } = body;
-      const incident = memoryIncidents.find(i => i.id === id);
-      if (!incident) return res.status(404).json({ error: 'Incident not found' });
+      const incident = memoryIncidents.find(i => i.id === incidentId);
+      if (!incident) {
+        return res.status(404).json({ error: `Incident ${incidentId} not found in SIEM matrix` });
+      }
       if (status) incident.status = status;
       if (containmentAction) incident.containmentActionTaken = containmentAction;
       if (note) incident.notes.push(note);
       return res.status(200).json({ success: true, incident });
     }
 
-    // 12. STIX 2.1 Bundler: /api/soc/stix-export
+    // -----------------------------------------------------------------
+    // ROUTE 12: OASIS STIX 2.1 Bundler -> /api/soc/stix-export
+    // -----------------------------------------------------------------
     if (route === 'soc/stix-export') {
-      if (method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-      const { target, indicatorType, threatScore, findings } = body;
+      if (method !== 'POST') {
+        return res.status(405).json({ error: `Method ${method} Not Allowed for /api/soc/stix-export. Expected POST.` });
+      }
+
+      const { target, indicatorType, threatScore, findings, notes } = body;
       const bundleId = `bundle--${crypto.randomUUID()}`;
       const indicatorId = `indicator--${crypto.randomUUID()}`;
       const sightingId = `sighting--${crypto.randomUUID()}`;
@@ -312,10 +434,10 @@ export default async function handler(req: any, res: any) {
             id: indicatorId,
             created: now,
             modified: now,
-            name: `CyberGuard Indicator: ${target || 'Unknown Indicator'}`,
-            description: `Forensic detection observed by CyberGuard Unified SOC Engine. Threat index evaluated at ${threatScore || 75}/100.`,
+            name: `CyberGuard Threat Indicator: ${target || 'malicious-c2-node.org'}`,
+            description: notes || `Forensic detection observed by CyberGuard Unified SOC Engine. Threat index evaluated at ${threatScore || 75}/100.`,
             indicator_types: [indicatorType || 'malicious-activity'],
-            pattern: `[domain-name:value = '${target || 'unknown.org'}']`,
+            pattern: `[domain-name:value = '${target || 'malicious-c2-node.org'}']`,
             pattern_type: 'stix',
             valid_from: now,
             confidence: threatScore || 80
@@ -327,26 +449,63 @@ export default async function handler(req: any, res: any) {
             created: now,
             modified: now,
             sighting_of_ref: indicatorId,
-            summary: `Automated detection trigger: ${(findings || ['High anomaly threshold']).join('; ')}`
+            summary: `Automated detection trigger: ${(findings || ['High anomaly score threshold triggered', 'Known C2 infrastructure']).join('; ')}`
           }
         ]
       };
-      return res.status(200).json({ success: true, bundle: stixBundle, jsonString: JSON.stringify(stixBundle, null, 2) });
+
+      return res.status(200).json({
+        success: true,
+        bundle: stixBundle,
+        stixBundle: stixBundle,
+        jsonString: JSON.stringify(stixBundle, null, 2)
+      });
     }
 
-    // 13. Scans List: /api/scans
+    // -----------------------------------------------------------------
+    // ROUTE 13: Scan History List -> /api/scans
+    // -----------------------------------------------------------------
     if (route === 'scans') {
       return res.status(200).json({ scans: memoryScans });
     }
 
-    // 14. Purge Scans: /api/scans/clear
+    // -----------------------------------------------------------------
+    // ROUTE 14: Clear History (GDPR Purge) -> /api/scans/clear
+    // -----------------------------------------------------------------
     if (route === 'scans/clear') {
       memoryScans = [];
       return res.status(200).json({ success: true, message: 'All scan records cleared successfully' });
     }
 
-    return res.status(404).json({ error: `API route not found: /api/${route}` });
+    // -----------------------------------------------------------------
+    // 404 UNMATCHED ROUTE WITH EXPLICIT JSON ERROR
+    // -----------------------------------------------------------------
+    return res.status(404).json({
+      error: `API route not found: /api/${route}`,
+      receivedUrl: req.url,
+      resolvedRoute: route,
+      supportedRoutes: [
+        'POST /api/scan',
+        'POST /api/scan-link',
+        'POST /api/scan-image',
+        'GET  /api/cve/search',
+        'GET  /api/cve/latest',
+        'POST /api/soc/osint-lookup',
+        'POST /api/soc/hash-lookup',
+        'GET  /api/soc/incidents',
+        'POST /api/soc/incidents/:id/triage',
+        'POST /api/soc/stix-export',
+        'GET  /api/scans',
+        'POST /api/scans/clear',
+        'GET  /api/auth/me',
+        'GET  /api/health'
+      ]
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal Server Error' });
+    console.error(`[CyberGuard API Error] Exception during /api/${route}:`, err);
+    return res.status(500).json({
+      error: err.message || 'Internal Server Error during security analysis',
+      route: `/api/${route}`
+    });
   }
 }
