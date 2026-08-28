@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, ChevronLeft, Sun, Moon, Terminal, Activity, Database } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 import { User, ScanResult } from './types';
 import Dashboard from './components/Dashboard';
 import ReportView from './components/ReportView';
@@ -136,6 +137,7 @@ export default function App() {
         </div>
       </footer>
 
+      <Analytics />
     </div>
   );
 }
