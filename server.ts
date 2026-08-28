@@ -1,11 +1,23 @@
 import path from 'path';
 import fs from 'fs';
 import express, { Request, Response } from 'express';
-import app from './api/index';
+import handler from './api/[...path]';
 
+const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
-// In production / local standalone mode, serve Vite built assets from dist/
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ limit: '15mb', extended: true }));
+
+// Route all /api/* requests to the unified catch-all handler
+app.all('/api/*', async (req: Request, res: Response) => {
+  await handler(req, res);
+});
+app.all('/api', async (req: Request, res: Response) => {
+  await handler(req, res);
+});
+
+// Serve frontend SPA in production
 const distPath = path.resolve(process.cwd(), 'dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
@@ -20,7 +32,6 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-// Start local HTTP server
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[CyberGuard] Core Threat Engine running on http://0.0.0.0:${PORT}`);
