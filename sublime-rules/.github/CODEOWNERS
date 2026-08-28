@@ -1,0 +1,4 @@
+*.yml @sublime-security/detection-engineers
+
+/.github/ @sublime-security/threat-operations-engineering
+/scripts/ @sublime-security/threat-operations-engineering

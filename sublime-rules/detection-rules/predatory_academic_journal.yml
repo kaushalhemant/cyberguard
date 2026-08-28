@@ -1,0 +1,177 @@
+name: "Spam/fraud: Predatory journal/research paper request"
+description: "Detects messages related to academic research and publishing that contain suspicious patterns including character manipulation, flattering language, time pressure tactics, and domain registration anomalies. Focuses on unsolicited invitations for manuscript submissions, peer reviews, or editorial roles."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(beta.ml_topic(body.current_thread.text).topics,
+          .name == "Educational and Research"
+          and .confidence in ("medium", "high")
+  )
+  and not any(beta.ml_topic(body.current_thread.text).topics,
+              .name in ("Health and Wellness") and .confidence == "high"
+  )
+  and ml.nlu_classifier(body.current_thread.text).language == "english"
+  and 3 of (
+    regex.count(body.current_thread.text,
+                '[Æ×æı-ĳŉŒœƁƄƇƊƍƓƖƘƠơƤƦƧƬƳƷƼƽǀǁǇ-ǌǱ-ǳȜȢȣɑɡɣɩɪɯʋʏʣʦʪʫ˛ͺͿΑΒΕ-ΗΙΚΜΝΟΡΤΥΧαγινορσυϒϜϨϱ-ϳϹϺЅІЈАВЕЗКМ-ОР-УХЫЬЮабгеорсухѕіјѡѴѵґҮүһҽӀӏӔӕӠԁԌԛ-ԝՍՏՕագզհոռսցքօ׀וטןסװױاه١٥٧ھہە۱۵۷߀ߊ०০৪৭੦੧੪ଠ୦୨ഠ൦๐໐ဝ၀ყჿሀዐᎠ-ᎢᎤᎥᎩ-ᎬᎳᎷᎻᎽᏀᏂᏃᏎᏏᏒᏔᏕᏙᏚᏞᏟᏢᏦᏧᏮᏳᏴᐯᑌᑧᑭᑯᑲᒆ-ᒈᒍᒪᒿᕁᕼᕽᖇᖯᖴᗅᗞᗪᗰᗷ᙭᙮ᚷᛁᛕᛖᴄᴏᴑᴜᴠ-ᴢᴦᵫᶃᶌẝỿι‖₨₶℀-ℂ℅℆ℊ-ℎℐ-ℓℕ№ℙ-ℝ℡ℤℨℬ-ℱℳℴℹ℻ℽⅅ-ⅉⅠ-ⅿ∞∣∥∨∪⊤⋁⋃⋿⍳⍴⍺⏽⑴-⒵╳⟙⤫⤬⨯ⲅⲎⲒⲔⲘⲚⲞⲟⲢ-ⲦⲨⲬⳊⳌⳐⳒⴸⴹⵏⵔⵕⵝ〇ꓐ-ꓔꓖꓗꓙꓚꓜꓝꓟ-ꓣꓦꓧꓪ-ꓬꓮꓰꓲ-ꓴꙄꙇꚘꚙꛟꛯꜨꜱ-ꜽꝎꝏꝚꝪꝮꝷꭵꮁꮃꮓꮩꮪꮯﬀ-ﬄﬆﮦ-ﮭﺍﺎﻩ-ﻬＡ-ＣＥＨ-ＫＭ-ＰＳＴＸ-Ｚａｃｅｇ-ｊｌｏｐｓｖｘｙ￨𐊂𐊆𐊇𐊊𐊐𐊒𐊕-𐊗𐊠-𐊢𐊥𐊫𐊰-𐊲𐊴𐋏𐋵𐌁𐌂𐌉𐌑𐌕𐌗𐌚𐌠𐌢𐐄𐐕𐐛𐐠𐐬𐐽𐑈𐒴𐓂𐓎𐓒𐓪𐓶𐔓𐔖𐔘𐔜𐔝𐔥-𐔧𑓐𑜀𑜆𑜊𑜎𑜏𑢠𑢢-𑢤𑢦𑢩𑢬𑢮𑢯𑢲𑢵𑢸𑢻𑢼𑣀-𑣄𑣆𑣈𑣊𑣌𑣕-𑣘𑣜𑣠𑣣𑣥𑣦𑣩𑣬𑣯𑣲𖼈𖼊𖼖𖼨𖼵𖼺𖼻𖽀𖽂𖽃𝐀-𝑔𝑖-𝒜𝒞𝒟𝒢𝒥𝒦𝒩-𝒬𝒮-𝒹𝒻𝒽-𝓃𝓅-𝔅𝔇-𝔊𝔍-𝔔𝔖-𝔜𝔞-𝔹𝔻-𝔾𝕀-𝕄𝕆𝕊-𝕐𝕒-𝚤𝚨𝚩𝚬-𝚮𝚰𝚱𝚳𝚴𝚶𝚸𝚻𝚼𝚾𝛂𝛄𝛊𝛎𝛐𝛒𝛔𝛖𝛠𝛢𝛣𝛦-𝛨𝛪𝛫𝛭𝛮𝛰𝛲𝛵𝛶𝛸𝛼𝛾𝜄𝜈𝜊𝜌𝜎𝜐𝜚𝜜𝜝𝜠-𝜢𝜤𝜥𝜧𝜨𝜪𝜬𝜯𝜰𝜲𝜶𝜸𝜾𝝂𝝄𝝆𝝈𝝊𝝔𝝖𝝗𝝚-𝝜𝝞𝝟𝝡𝝢𝝤𝝦𝝩𝝪𝝬𝝰𝝲𝝸𝝼𝝾𝞀𝞂𝞄𝞎𝞐𝞑𝞔-𝞖𝞘𝞙𝞛𝞜𝞞𝞠𝞣𝞤𝞦𝞪𝞬𝞲𝞶𝞸𝞺𝞼𝞾𝟈𝟊𝟎]'
+    ) > 100,
+    regex.icontains(strings.replace_confusables(body.current_thread.text),
+                    "Impact Factor",
+                    "Special Issue",
+                    "Guest Editor",
+                    "peer-review",
+                    "manuscript",
+                    "workshop",
+                    "journal (of|editor)",
+                    "inclusive research",
+                    "abstract",
+                    "open-access",
+                    "upcoming edition",
+                    "title of (your (work|published article)|the study)",
+                    "your paper's title",
+                    "and the abstract",
+                    "abstract of (your work|the study)",
+                    "detailed abstract",
+                    'contribution\b',
+                    "accepted paper",
+                    "submit.{0,20}.(manuscript|article)",
+                    "call for editorial",
+                    "reviewer team",
+                    "review.{0,15}.(journal|issue)"
+    ),
+  
+    // flattering language, as seen in previous research
+    regex.icontains(strings.replace_confusables(body.current_thread.text),
+                    'your\s+(article|paper|research|publication|work)\s+"?[^"]+?"?\s+(is\s+very\s+excellent|strongly\s+reflects|will\s+be\s+a\s+valuable)',
+                    'we\s+believe\s+(that\s+)?your\s+(experience|perspective|expertise|comments?)\s+(will\s+add|can\s+play|will\s+be)\s+.{0,100}(important|valuable)',
+                    '(you\s+are\s+one\s+of\s+the\s+leading\s+experts?|someone\s+of\s+your\s+caliber)',
+                    '(emerging\s+voices?\s+like\s+yours|shape\s+the\s+scholarly\s+direction)',
+                    '(learning\s+from\s+the\s+internet|know\s+your\s+"[^"]+"\s+is\s+very\s+excellent)',
+                    '(world''s|global|international)\s+(foremost|leading|top|premier)\s+(authorities|experts|researchers)',
+                    // The "highly valued" variants
+                    'your\s+(participation|contribution|presence|involvement)\s+(would\s+be|is)\s+(highly|greatly|immensely|extremely)\s+(valued|appreciated|welcomed)',
+  
+                    // Time pressure tactics
+                    '(short\s+notice|busy\s+schedule|quick\s+turnaround|urgent\s+deadline|limited\s+slots)',
+  
+                    // "No charge" red flags
+                    '(no\s+charge|free\s+of\s+charge|waived\s+fee|complimentary|at\s+no\s+cost)',
+  
+                    // Vague topic promises
+                    '(topic\s+of\s+your\s+choice|any\s+topic\s+related|broad\s+range\s+of\s+topics|multidisciplinary\s+approach)',
+  
+                    // Easy publication promises
+                    '(guaranteed\s+publication|fast\s+track\s+review|expedited\s+process|will\s+not\s+be\s+too\s+time-consuming)',
+  
+                    // Template giveaways
+                    '(do\s+hope\s+you\s+can\s+make\s+time|kindly\s+submit|gentle\s+reminder|esteemed\s+researcher)'
+    ),
+  
+    // Message contains the users last name, but not their first name
+    // Presumably, this is because names are listed that way on academic papers
+    strings.icontains(body.current_thread.text, mailbox.last_name)
+    and not strings.icontains(body.current_thread.text, mailbox.first_name)
+    and not any(recipients.to,
+                strings.icontains(body.current_thread.text, .email.email)
+    )
+    and length(mailbox.last_name) > 4,
+  
+    // Or, message contains the users last, first
+    // Example: Doe, John
+    // Presumably, this is because names are listed that way on academic papers
+    strings.icontains(body.current_thread.text,
+                      strings.concat(mailbox.last_name, ", ", mailbox.first_name)
+    ),
+  
+    // new sender or link domain
+    network.whois(sender.email.domain).days_old < 90,
+    any(body.links, network.whois(.href_url.domain).days_old < 90),
+  
+    // Crossref DOI registration abuse (https://doi.org/10.29328)
+    any(body.links,
+        .href_url.domain.root_domain == "doi.org"
+        and strings.istarts_with(.href_url.path, '/10.29328')
+    ),
+  
+    // Sender does not match original thread sender
+    length(body.previous_threads) > 0
+    and any(regex.iextract(body.html.display_text, 'From: (?P<email_address>\S*)'),
+            strings.parse_email(.named_groups['email_address']).email != sender.email.email
+    ),
+  
+    // sent from Windows Server with default name
+    strings.contains(headers.message_id, "@DESKTOP-"),
+  
+    // requesting a manuscript review
+    strings.ilike(body.current_thread.text, "*review*")
+    and strings.ilike(body.current_thread.text, "*manuscript*", "*submission*"),
+  
+    // Chinese registrant country
+    network.whois(sender.email.domain).registrant_country_code == "CN",
+    any(body.links,
+        network.whois(.href_url.domain).registrant_country_code == "CN"
+    ),
+  
+    // Alibaba infrastructure
+    any(headers.domains, .root_domain in ("aliyun.com", "aliyun-inc.com")),
+  
+    // Known predatory journals that we've observed and matched to beallslist.net
+    sender.email.domain.root_domain in (
+      "iris-research.net",
+      "irispublishers.com",
+      "lidsen.com"
+    ),
+  
+    // sender domain and body link domains do not match, but have the same registration details
+    (
+      length(body.links) > 0
+      and all(body.links,
+              (
+                network.whois(.href_url.domain).registrant_company == network.whois(sender.email.domain
+                ).registrant_company
+                and network.whois(.href_url.domain).registrar_name == network.whois(sender.email.domain
+                ).registrar_name
+              )
+              and .href_url.domain.root_domain != sender.email.domain.root_domain
+      )
+    ),
+  
+    // known patterns
+    any(body.links, regex.imatch(.href_url.path, '^/ey[a-z]/.{2,}$'))
+  )
+  
+  // negate microsoft quarantine messages
+  and not (
+    sender.email.email == "quarantine@messaging.microsoft.com"
+    and (
+      headers.auth_summary.dmarc.pass
+      // no sender auth but MS AuthAs is Internal
+      or (
+        not coalesce(headers.auth_summary.dmarc.pass, false)
+        and any(headers.hops,
+                .index == 0
+                and any(.fields,
+                        .name == "X-MS-Exchange-CrossTenant-AuthAs"
+                        and .value == "Internal"
+                )
+        )
+      )
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Evasion"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "263ca56b-d31b-5b38-b00e-c1c45e5e96bb"

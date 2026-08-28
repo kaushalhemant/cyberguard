@@ -1,0 +1,7 @@
+name: "SPF: Fail"
+type: "query"
+source: |
+  not headers.auth_summary.spf.pass
+severity: "medium"
+tags:
+  - "Sender authentication"

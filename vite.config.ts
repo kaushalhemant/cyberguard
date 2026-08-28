@@ -26,5 +26,17 @@ export default defineConfig(() => {
         ignored: ['**/db.json', '**/db.json.tmp']
       },
     },
+    build: {
+      chunkSizeWarningLimit: 2000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom'],
+            jspdf: ['jspdf'],
+            icons: ['lucide-react']
+          }
+        }
+      }
+    }
   };
 });
