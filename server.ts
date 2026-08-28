@@ -18,6 +18,7 @@ import { db, hashPassword } from './src/server/db';
 import { generateBreachReportSummary, generateLinkThreatReport, generateImageThreatReport, generateThreatIntelligenceReport } from './src/server/cyberguardAI';
 import { scanUrl, scanEmail, scanImage, scanUnified } from './src/server/scanners/unifiedScanner';
 import { searchCves, getLatestCves } from './src/server/scanners/cveScanner';
+import { checkVirusTotalHash, checkVirusTotalIp } from './src/server/scanners/virustotalScanner';
 import { User, Breach, ScanResult } from './src/types';
 
 
@@ -861,7 +862,7 @@ let socIncidentsList = [
   }
 ];
 
-// OSINT & IP Forensic Inspector Endpoint
+// OSINT & IP Forensic Inspector Endpoint (with Live VirusTotal Integration)
 app.post('/api/soc/osint-lookup', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const { target } = req.body;
   if (!target || typeof target !== 'string') {
@@ -871,26 +872,36 @@ app.post('/api/soc/osint-lookup', authenticate, async (req: AuthenticatedRequest
   const cleanTarget = target.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
   const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(cleanTarget);
   
+  // Live VirusTotal Threat Intelligence Lookup
+  const vtResult = await checkVirusTotalIp(cleanTarget);
+  
   // Dynamic forensic calculations
   const hashVal = cleanTarget.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const repScore = Math.min(98, Math.max(12, (hashVal * 7) % 100));
-  
+  let repScore = vtResult && vtResult.matched
+    ? Math.min(100, 45 + vtResult.maliciousCount * 5 + vtResult.suspiciousCount * 3)
+    : Math.min(98, Math.max(12, (hashVal * 7) % 100));
+
+  const vtListed = vtResult ? vtResult.maliciousCount > 0 : repScore > 35;
+  const vtCategory = vtResult && vtResult.matched
+    ? `Malware / C2 (${vtResult.maliciousCount}/${vtResult.totalEngines} AV Engines Flagged)`
+    : 'Malware Distribution Engine';
+
   const mockResult = {
     target: cleanTarget,
     resolvedIp: isIp ? cleanTarget : `185.${(hashVal % 200) + 10}.${(hashVal % 150) + 20}.${(hashVal % 250) + 1}`,
     hostname: isIp ? `host-${cleanTarget.replace(/\./g, '-')}.security-mesh.net` : cleanTarget,
     location: {
-      country: isIp ? 'Netherlands' : 'United States',
+      country: vtResult?.country || (isIp ? 'Netherlands' : 'United States'),
       city: isIp ? 'Amsterdam' : 'Ashburn',
-      isp: isIp ? 'AS20860 TorGuard Network' : 'Cloudflare Inc. / AS13335',
-      asn: isIp ? 'ASN-20860' : 'ASN-13335',
+      isp: vtResult?.asOwner || (isIp ? 'AS20860 TorGuard Network' : 'Cloudflare Inc. / AS13335'),
+      asn: vtResult?.asn || (isIp ? 'ASN-20860' : 'ASN-13335'),
       flag: isIp ? '🇳🇱' : '🇺🇸'
     },
     reputationScore: repScore,
     blacklists: [
+      { name: 'VirusTotal Intelligence Engine', listed: vtListed, category: vtCategory },
       { name: 'Spamhaus Zen', listed: repScore > 40, category: 'Spam & Exploit Host' },
       { name: 'AbuseIPDB ThreatDB', listed: repScore > 50, category: 'Brute Force & Scan' },
-      { name: 'VirusTotal Threat Engine', listed: repScore > 35, category: 'Malware Distribution' },
       { name: 'Quad9 Security Filter', listed: repScore > 65, category: 'Phishing C2' },
       { name: 'CyberGuard Native Neural ThreatDB', listed: repScore > 45, category: 'Active OSINT Indicator' }
     ],
@@ -917,14 +928,14 @@ app.post('/api/soc/osint-lookup', authenticate, async (req: AuthenticatedRequest
     threatCategories: repScore > 50 
       ? ['Command & Control Server (C2)', 'Phishing Infrastructure', 'High Risk ASN'] 
       : ['Standard Cloud Asset', 'Verified Domain Name'],
-    investigatorNotes: `Official OSINT Resolution generated on ${new Date().toISOString()} by CyberGuard SOC Engine. Threat score evaluated at ${repScore}/100.`,
+    investigatorNotes: `Official OSINT Resolution generated on ${new Date().toISOString()} by CyberGuard SOC Engine.${vtResult && vtResult.matched ? ` VirusTotal flagged ${vtResult.maliciousCount}/${vtResult.totalEngines} malicious detections.` : ''} Threat score evaluated at ${repScore}/100.`,
     timestamp: new Date().toISOString()
   };
 
   res.json(mockResult);
 });
 
-// Malware Payload & Hash Forensics Endpoint
+// Malware Payload & Hash Forensics Endpoint (with Live VirusTotal Integration)
 app.post('/api/soc/hash-lookup', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const { hash, fileName } = req.body;
   if (!hash || typeof hash !== 'string') {
@@ -937,29 +948,53 @@ app.post('/api/soc/hash-lookup', authenticate, async (req: AuthenticatedRequest,
   else if (cleanHash.length === 40) hashType = 'SHA1';
   else if (cleanHash.length === 64) hashType = 'SHA256';
 
+  // Live VirusTotal File Threat Intelligence Query
+  const vtHashResult = await checkVirusTotalHash(cleanHash);
+
   const seed = cleanHash.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const isMalicious = seed % 2 === 0;
+  const isMalicious = vtHashResult ? (vtHashResult.maliciousCount > 0 || vtHashResult.suspiciousCount > 0) : (seed % 2 === 0);
+
+  const yaraRules = isMalicious
+    ? ['SUSP_PE_Packed_HighEntropy', 'RAT_AsyncRAT_Config_Key', 'MALW_Stealer_MemoryDump']
+    : ['GENERIC_DOC_PDF_CleanHeader'];
+
+  if (vtHashResult && vtHashResult.flaggedEngines.length > 0) {
+    vtHashResult.flaggedEngines.slice(0, 4).forEach(fe => {
+      yaraRules.push(`VT_AV_${fe.engine.toUpperCase()}_${fe.result.replace(/[^a-zA-Z0-9]/g, '_')}`);
+    });
+  }
+
+  const threatIndicators = isMalicious
+    ? [
+        vtHashResult && vtHashResult.maliciousCount > 0
+          ? `VirusTotal Live Detection: ${vtHashResult.maliciousCount}/${vtHashResult.totalEngines} AV engines flagged payload`
+          : 'High Shannon Entropy (7.68/8.00) indicates packed code',
+        'Imports suspicious API: VirtualProtect / WriteProcessMemory',
+        'Communicates with dynamic DNS C2 domains'
+      ]
+    : ['Standard file header', 'No memory injection API imports found'];
+
+  const recommendation = isMalicious
+    ? (vtHashResult && vtHashResult.maliciousCount > 0
+        ? `CRITICAL: VirusTotal confirmed malware detection across ${vtHashResult.maliciousCount} security vendors (${vtHashResult.threatFamily}). Isolate host machine and block SHA-256 immediately.`
+        : 'CRITICAL: Isolate host machine immediately. Quarantine binary payload and block SHA-256 hash across endpoint EDR agent.')
+    : 'File hash exhibits clean baseline metrics. No malicious behavior detected.';
 
   const result = {
     hash: cleanHash,
     hashType,
-    fileName: fileName || `suspicious_artifact_${cleanHash.substring(0, 8)}.bin`,
+    fileName: vtHashResult?.meaningfulName || fileName || `suspicious_artifact_${cleanHash.substring(0, 8)}.bin`,
     fileSizeBytes: (seed * 1024) % 4500000 + 4096,
-    detectedFormat: isMalicious ? 'Win32 Executable (PE32+ GUI / DLL Payload)' : 'PDF Document (Adobe Acrobat Spec 1.7)',
-    magicBytes: isMalicious ? '4D 5A 90 00 03 00 00 00 (MZ Executable Header)' : '25 50 44 46 2D 31 2E 37 (%PDF-1.7)',
+    detectedFormat: vtHashResult?.typeDescription || (isMalicious ? 'Win32 Executable (PE32+ GUI / DLL Payload)' : 'PDF Document (Adobe Acrobat Spec 1.7)'),
+    magicBytes: vtHashResult?.magicBytes || (isMalicious ? '4D 5A 90 00 03 00 00 00 (MZ Executable Header)' : '25 50 44 46 2D 31 2E 37 (%PDF-1.7)'),
     entropyScore: isMalicious ? 7.68 : 3.82,
     isPackedOrEncrypted: isMalicious,
     malwareClassification: isMalicious ? ('malicious' as const) : ('clean' as const),
-    threatFamily: isMalicious ? 'AsyncRAT / Trojan.Psw.Stealer' : undefined,
-    matchedYaraRules: isMalicious 
-      ? ['SUSP_PE_Packed_HighEntropy', 'RAT_AsyncRAT_Config_Key', 'MALW_Stealer_MemoryDump'] 
-      : ['GENERIC_DOC_PDF_CleanHeader'],
-    threatIndicators: isMalicious 
-      ? ['High Shannon Entropy (7.68/8.00) indicates packed code', 'Imports suspicious API: VirtualProtect / WriteProcessMemory', 'Communicates with dynamic DNS C2 domains']
-      : ['Standard file header', 'No memory injection API imports found'],
-    recommendation: isMalicious 
-      ? 'CRITICAL: Isolate host machine immediately. Quarantine binary payload and block SHA-256 hash across endpoint EDR agent.'
-      : 'File hash exhibits clean baseline metrics. No malicious behavior detected.',
+    threatFamily: vtHashResult?.threatFamily || (isMalicious ? 'AsyncRAT / Trojan.Psw.Stealer' : undefined),
+    matchedYaraRules: yaraRules,
+    threatIndicators,
+    recommendation,
+    virusTotalPermalink: vtHashResult?.permalink,
     timestamp: new Date().toISOString()
   };
 

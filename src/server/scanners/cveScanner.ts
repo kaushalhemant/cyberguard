@@ -257,8 +257,6 @@ export async function loadNvdCveDatabase(): Promise<CveRecord[]> {
     const possiblePaths = [
       path.join(process.cwd(), 'nvdcve-2.0-modified.json'),
       path.resolve('nvdcve-2.0-modified.json'),
-      path.join(__dirname, 'nvdcve-2.0-modified.json'),
-      path.join(__dirname, '..', '..', '..', 'nvdcve-2.0-modified.json'),
     ];
 
     const foundPath = possiblePaths.find(p => {

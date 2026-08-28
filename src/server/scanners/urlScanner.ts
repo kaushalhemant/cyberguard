@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { ScanRiskReport, TriggeredFlag, RiskLevel } from '../../types/scanners';
 import { checkPhishStats } from './phishstatsScanner';
+import { checkVirusTotalUrl } from './virustotalScanner';
 
 
 /**
@@ -405,13 +406,14 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
     }
   }
 
-  // 5-9. PARALLEL NETWORK & THREAT INTELLIGENCE LOOKUPS
-  const [redirectRes, tlsRes, whoisRes, urlhausRes, phishstatsRes] = await Promise.allSettled([
+  // 5-10. PARALLEL NETWORK & THREAT INTELLIGENCE LOOKUPS (INCLUDING VIRUSTOTAL)
+  const [redirectRes, tlsRes, whoisRes, urlhausRes, phishstatsRes, vtRes] = await Promise.allSettled([
     followRedirectChain(rawUrl),
     (parsedUrl.protocol === 'https:' && !isIpLiteral) ? inspectTlsCert(hostname, parsedUrl.port ? parseInt(parsedUrl.port, 10) : 443) : Promise.resolve(null),
     (!isIpLiteral && hostname.includes('.')) ? lookupDomainAge(hostname) : Promise.resolve({ domainAgeDays: null, registrar: null }),
     checkUrlhausApi(rawUrl),
-    checkPhishStats(rawUrl)
+    checkPhishStats(rawUrl),
+    checkVirusTotalUrl(rawUrl)
   ]);
 
   const redirectInfo = redirectRes.status === 'fulfilled' ? redirectRes.value : { finalUrl: rawUrl, redirectChain: [rawUrl] };
@@ -419,6 +421,7 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
   const whoisInfo = whoisRes.status === 'fulfilled' ? whoisRes.value : { domainAgeDays: null, registrar: null };
   const urlhausMatch = urlhausRes.status === 'fulfilled' ? urlhausRes.value : null;
   const phishstatsMatch = phishstatsRes.status === 'fulfilled' ? phishstatsRes.value : null;
+  const vtMatch = vtRes.status === 'fulfilled' ? vtRes.value : null;
 
   if (redirectInfo.redirectChain.length > 2) {
     flags.push({
@@ -484,6 +487,18 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
       weight: 60,
       description: `Target matched active zero-day phishing campaign (Target: "${phishstatsMatch.target || 'Brand Impersonation'}", Host IP: ${phishstatsMatch.ip || 'N/A'}, Country: ${phishstatsMatch.country || 'N/A'}).`,
       securityReasoning: 'PhishStats monitors active phishing host deployments and zero-day brand impersonation URLs.'
+    });
+  }
+
+  if (vtMatch && vtMatch.matched) {
+    const isCritical = vtMatch.maliciousCount >= 3;
+    flags.push({
+      id: 'FLAG-VIRUSTOTAL-MALICIOUS-MATCH',
+      name: `VirusTotal Flagged Malicious (${vtMatch.maliciousCount}/${vtMatch.totalEngines} AV Engines)`,
+      severity: isCritical ? 'CRITICAL' : 'HIGH',
+      weight: isCritical ? 70 : 45,
+      description: `Target was flagged as malicious or suspicious by ${vtMatch.maliciousCount} global antivirus engines${vtMatch.flaggedEngines.length ? ` (Top Flagged: ${vtMatch.flaggedEngines.join(', ')})` : ''}.`,
+      securityReasoning: 'VirusTotal aggregates real-time threat intelligence from over 70 leading antivirus scanners and URL reputation engines.'
     });
   }
 
