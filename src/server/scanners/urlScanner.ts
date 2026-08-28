@@ -109,7 +109,7 @@ async function inspectTlsCert(hostname: string, port: number = 443): Promise<{
         port: port,
         servername: hostname,
         rejectUnauthorized: false,
-        timeout: 4000
+        timeout: 1500
       }, () => {
         const cert = socket.getPeerCertificate(false);
         socket.end();
@@ -155,7 +155,7 @@ async function inspectTlsCert(hostname: string, port: number = 443): Promise<{
  * Security Reasoning: Phishing campaigns use multi-stage URL shorteners and HTTP 301/302 redirects
  * to bypass static email gateway filters before delivering victims to malicious landing pages.
  */
-async function followRedirectChain(url: string, maxRedirects: number = 5): Promise<{ finalUrl: string; redirectChain: string[] }> {
+async function followRedirectChain(url: string, maxRedirects: number = 3): Promise<{ finalUrl: string; redirectChain: string[] }> {
   const redirectChain: string[] = [url];
   let currentUrl = url;
 
@@ -164,7 +164,7 @@ async function followRedirectChain(url: string, maxRedirects: number = 5): Promi
       const response = await fetch(currentUrl, {
         method: 'HEAD',
         redirect: 'manual',
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(1500)
       });
 
       if (response.status >= 300 && response.status < 400) {
@@ -194,7 +194,7 @@ async function lookupDomainAge(domain: string): Promise<{ domainAgeDays: number 
   try {
     const rdapRes = await fetch(`https://rdap.org/domain/${domain}`, {
       headers: { 'Accept': 'application/rdap+json' },
-      signal: AbortSignal.timeout(3500)
+      signal: AbortSignal.timeout(1500)
     });
 
     if (rdapRes.ok) {
@@ -244,7 +244,7 @@ async function checkUrlhausApi(targetUrl: string): Promise<{
       method: 'POST',
       headers,
       body: formData.toString(),
-      signal: AbortSignal.timeout(4000)
+      signal: AbortSignal.timeout(1500)
     });
 
     if (!response.ok) return null;
@@ -261,7 +261,6 @@ async function checkUrlhausApi(targetUrl: string): Promise<{
     }
     return { matched: false, queryStatus: data.query_status };
   } catch (err) {
-    console.warn('[URLScanner] URLhaus API lookup warning:', err);
     return null;
   }
 }
@@ -406,9 +405,21 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
     }
   }
 
-  // 5. REDIRECT CHAIN TRACING
-  // Security Reasoning: Uncovers multi-stage URL shortener redirects designed to evade initial email gateway filters.
-  const redirectInfo = await followRedirectChain(rawUrl);
+  // 5-9. PARALLEL NETWORK & THREAT INTELLIGENCE LOOKUPS
+  const [redirectRes, tlsRes, whoisRes, urlhausRes, phishstatsRes] = await Promise.allSettled([
+    followRedirectChain(rawUrl),
+    (parsedUrl.protocol === 'https:' && !isIpLiteral) ? inspectTlsCert(hostname, parsedUrl.port ? parseInt(parsedUrl.port, 10) : 443) : Promise.resolve(null),
+    (!isIpLiteral && hostname.includes('.')) ? lookupDomainAge(hostname) : Promise.resolve({ domainAgeDays: null, registrar: null }),
+    checkUrlhausApi(rawUrl),
+    checkPhishStats(rawUrl)
+  ]);
+
+  const redirectInfo = redirectRes.status === 'fulfilled' ? redirectRes.value : { finalUrl: rawUrl, redirectChain: [rawUrl] };
+  const tlsInfo = tlsRes.status === 'fulfilled' ? tlsRes.value : null;
+  const whoisInfo = whoisRes.status === 'fulfilled' ? whoisRes.value : { domainAgeDays: null, registrar: null };
+  const urlhausMatch = urlhausRes.status === 'fulfilled' ? urlhausRes.value : null;
+  const phishstatsMatch = phishstatsRes.status === 'fulfilled' ? phishstatsRes.value : null;
+
   if (redirectInfo.redirectChain.length > 2) {
     flags.push({
       id: 'FLAG-REDIRECT-CHAIN',
@@ -420,55 +431,40 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
     });
   }
 
-  // 6. TLS CERTIFICATE INSPECTION
-  // Security Reasoning: Evaluates TLS certificate validity, issuer, and age. Short-lived or self-signed certs indicate disposable infrastructure.
-  let tlsInfo = null;
-  if (parsedUrl.protocol === 'https:' && !isIpLiteral) {
-    tlsInfo = await inspectTlsCert(hostname, parsedUrl.port ? parseInt(parsedUrl.port, 10) : 443);
-    if (tlsInfo) {
-      if (!tlsInfo.valid) {
-        flags.push({
-          id: 'FLAG-TLS-INVALID',
-          name: 'Invalid or Self-Signed TLS Certificate',
-          severity: 'HIGH',
-          weight: 30,
-          description: 'The target HTTPS connection failed certificate authority validation.',
-          securityReasoning: 'Invalid TLS certificates allow Man-in-the-Middle (MitM) inspection or indicate unverified server infrastructure.'
-        });
-      }
-      if (tlsInfo.ageDays !== undefined && tlsInfo.ageDays < 14) {
-        flags.push({
-          id: 'FLAG-TLS-NEW-CERT',
-          name: 'Recently Issued TLS Certificate (<14 Days)',
-          severity: 'MEDIUM',
-          weight: 20,
-          description: `TLS certificate was issued only ${tlsInfo.ageDays} days ago (Issuer: ${tlsInfo.issuer}).`,
-          securityReasoning: 'Attackers generate free, short-lived TLS certificates immediately prior to launching phishing campaigns.'
-        });
-      }
-    }
-  }
-
-  // 7. WHOIS / RDAP DOMAIN AGE CHECK
-  // Security Reasoning: Newly registered domains (<30 days old) lack established domain reputation.
-  let whoisInfo = null;
-  if (!isIpLiteral && hostname.includes('.')) {
-    whoisInfo = await lookupDomainAge(hostname);
-    if (whoisInfo.domainAgeDays !== null && whoisInfo.domainAgeDays < 30) {
+  if (tlsInfo) {
+    if (!tlsInfo.valid) {
       flags.push({
-        id: 'FLAG-NEWLY-REGISTERED-DOMAIN',
-        name: 'Newly Registered Domain (<30 Days Old)',
+        id: 'FLAG-TLS-INVALID',
+        name: 'Invalid or Self-Signed TLS Certificate',
         severity: 'HIGH',
-        weight: 35,
-        description: `Domain registration age is only ${whoisInfo.domainAgeDays} days old.`,
-        securityReasoning: 'Newly registered domains represent high-risk ephemeral infrastructure commonly abandoned after phishing campaigns.'
+        weight: 30,
+        description: 'The target HTTPS connection failed certificate authority validation.',
+        securityReasoning: 'Invalid TLS certificates allow Man-in-the-Middle (MitM) inspection or indicate unverified server infrastructure.'
+      });
+    }
+    if (tlsInfo.ageDays !== undefined && tlsInfo.ageDays < 14) {
+      flags.push({
+        id: 'FLAG-TLS-NEW-CERT',
+        name: 'Recently Issued TLS Certificate (<14 Days)',
+        severity: 'MEDIUM',
+        weight: 20,
+        description: `TLS certificate was issued only ${tlsInfo.ageDays} days ago (Issuer: ${tlsInfo.issuer}).`,
+        securityReasoning: 'Attackers generate free, short-lived TLS certificates immediately prior to launching phishing campaigns.'
       });
     }
   }
 
-  // 8. LIVE URLHAUS MALWARE THREAT DATABASE LOOKUP
-  // Security Reasoning: Cross-references target URL against live URLhaus threat intelligence database.
-  const urlhausMatch = await checkUrlhausApi(rawUrl);
+  if (whoisInfo && whoisInfo.domainAgeDays !== null && whoisInfo.domainAgeDays < 30) {
+    flags.push({
+      id: 'FLAG-NEWLY-REGISTERED-DOMAIN',
+      name: 'Newly Registered Domain (<30 Days Old)',
+      severity: 'HIGH',
+      weight: 35,
+      description: `Domain registration age is only ${whoisInfo.domainAgeDays} days old.`,
+      securityReasoning: 'Newly registered domains represent high-risk ephemeral infrastructure commonly abandoned after phishing campaigns.'
+    });
+  }
+
   if (urlhausMatch && urlhausMatch.matched) {
     flags.push({
       id: 'FLAG-URLHAUS-MALWARE-MATCH',
@@ -480,9 +476,6 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
     });
   }
 
-  // 9. LIVE PHISHSTATS ZERO-DAY PHISHING LOOKUP
-  // Security Reasoning: Cross-references target URL against live PhishStats zero-day phishing target feed.
-  const phishstatsMatch = await checkPhishStats(rawUrl);
   if (phishstatsMatch && phishstatsMatch.matched) {
     flags.push({
       id: 'FLAG-PHISHSTATS-ZERO-DAY-MATCH',

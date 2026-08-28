@@ -50,42 +50,140 @@ export default function Terminal() {
     switch (command) {
       case 'help':
         addLog('CyberGuard Official SOC Security Commands:', 'success');
-        addLog('  cve-search <query>        - Search NIST NVD CVE vulnerability records by keyword', 'output');
+        addLog('  cve <query>               - Search NIST NVD CVE vulnerability records by keyword', 'output');
+        addLog('  osint <ip/domain>         - Perform deep OSINT IP forensic inspection & port audit', 'output');
+        addLog('  hash <sha256/md5>         - Analyze malware binary hash, entropy & YARA matches', 'output');
+        addLog('  scan <email>              - Run deep breach search on target email', 'output');
+        addLog('  stix <target>             - Generate STIX 2.1 evidence bundle JSON', 'output');
         addLog('  sys-info                  - Display SOC system telemetry & runtime stats', 'output');
-        addLog('  soc-osint <ip/domain>     - Perform deep OSINT IP forensic inspection & port audit', 'output');
-        addLog('  soc-hash <sha256/md5>     - Analyze malware binary hash, entropy & YARA matches', 'output');
-        addLog('  stix-export <target>      - Generate STIX 2.1 evidence bundle JSON', 'output');
-        addLog('  cyberguard-scan <email>   - Run deep breach search on target email', 'output');
-        addLog('  clear                    - Clear the terminal screen buffer', 'output');
+        addLog('  clear                     - Clear the terminal screen buffer', 'output');
         break;
 
+      case 'cve':
       case 'cve-search': {
         const query = args.slice(1).join(' ');
         if (!query) {
-          addLog('Error: Specify a search query. Example: cve-search Log4j', 'error');
+          addLog('Error: Specify a search query. Example: cve Log4j', 'error');
           break;
         }
-        addLog(`[~] Querying NIST NVD CVE vulnerability records for: "${query}"...`, 'output');
+        addLog(`[~] Querying NIST NVD CVE records for: "${query}"...`, 'output');
         fetch(`/api/cve/search?query=${encodeURIComponent(query)}&limit=5`)
           .then(res => res.json())
           .then(data => {
             if (!data.cves || data.cves.length === 0) {
               addLog(`[-] No CVE records found matching "${query}".`, 'error');
             } else {
-              addLog(`[+] Found ${data.totalMatches} matches in NIST NVD database (showing top ${data.cves.length}):`, 'success');
-              data.cves.forEach((cve: any) => {
-                addLog(`    - ${cve.id} [${cve.severity}] (Score: ${cve.score}/10): ${cve.description.substring(0, 100)}...`, cve.severity === 'CRITICAL' ? 'error' : 'output');
+              addLog(`[+] Found ${data.totalMatches} matches in NIST NVD (showing top ${data.cves.length}):`, 'success');
+              data.cves.forEach((c: any) => {
+                addLog(`    - ${c.id} [${c.severity}] (Score: ${c.score || c.cvssScore}/10): ${c.description.substring(0, 90)}...`, c.severity === 'CRITICAL' ? 'error' : 'output');
               });
             }
           })
-          .catch(err => addLog(`[-] CVE search failed: ${err.message}`, 'error'));
+          .catch(err => addLog(`[-] CVE query failed: ${err.message}`, 'error'));
+        break;
+      }
+
+      case 'osint':
+      case 'soc-osint': {
+        const target = args[1];
+        if (!target) {
+          addLog('Error: Specify target IP or domain. Example: osint 185.220.101.5', 'error');
+          break;
+        }
+        addLog(`[~] Performing OSINT inspection for target: "${target}"...`, 'output');
+        fetch('/api/soc/osint-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) {
+              addLog(`[-] OSINT error: ${data.error}`, 'error');
+            } else {
+              addLog(`[+] OSINT Target: ${data.target} | Resolved: ${data.resolvedIp} | Score: ${data.reputationScore}/100`, 'success');
+              addLog(`    Location: ${data.location?.country} (${data.location?.city}) | ISP: ${data.location?.isp}`, 'output');
+              addLog(`    Blacklists: ${data.blacklists?.filter((b: any) => b.listed).length || 0} flagged`, data.reputationScore > 50 ? 'error' : 'output');
+            }
+          })
+          .catch(err => addLog(`[-] OSINT lookup failed: ${err.message}`, 'error'));
+        break;
+      }
+
+      case 'hash':
+      case 'soc-hash': {
+        const h = args[1];
+        if (!h) {
+          addLog('Error: Specify binary payload hash. Example: hash 44d88612fea8a8f36de82e1278abb02f', 'error');
+          break;
+        }
+        addLog(`[~] Analyzing binary hash: "${h}"...`, 'output');
+        fetch('/api/soc/hash-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hash: h })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) {
+              addLog(`[-] Hash error: ${data.error}`, 'error');
+            } else {
+              addLog(`[+] Classification: ${data.malwareClassification?.toUpperCase()} | Format: ${data.detectedFormat}`, data.malwareClassification === 'malicious' ? 'error' : 'success');
+              addLog(`    Entropy: ${data.entropyScore}/8.00 | Family: ${data.threatFamily || 'Clean baseline'}`, 'output');
+              addLog(`    Recommendation: ${data.recommendation}`, 'output');
+            }
+          })
+          .catch(err => addLog(`[-] Hash lookup failed: ${err.message}`, 'error'));
+        break;
+      }
+
+      case 'scan':
+      case 'cyberguard-scan': {
+        const email = args[1];
+        if (!email || !email.includes('@')) {
+          addLog('Error: Specify valid email. Example: scan user@domain.com', 'error');
+          break;
+        }
+        addLog(`[~] Executing breach audit for: "${email}"...`, 'output');
+        fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) {
+              addLog(`[-] Scan error: ${data.error}`, 'error');
+            } else if (data.scan) {
+              addLog(`[+] Completed audit for ${data.scan.targetEmail}: Risk Score ${data.scan.riskScore}/100 (${data.scan.resultCount} breaches found)`, data.scan.riskScore >= 50 ? 'error' : 'success');
+            }
+          })
+          .catch(err => addLog(`[-] Scan failed: ${err.message}`, 'error'));
+        break;
+      }
+
+      case 'stix':
+      case 'stix-export': {
+        const target = args[1] || 'malicious-target.com';
+        addLog(`[~] Exporting STIX 2.1 evidence bundle for: "${target}"...`, 'output');
+        fetch('/api/soc/stix-export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.stixBundle) {
+              addLog(`[+] Generated STIX 2.1 Bundle ID: ${data.stixBundle.id} (Spec: 2.1)`, 'success');
+            }
+          })
+          .catch(err => addLog(`[-] STIX export failed: ${err.message}`, 'error'));
         break;
       }
 
       case 'sys-info': {
         addLog('[~] Gathering CyberGuard SOC Core System Telemetry...', 'output');
-        addLog('    Engine: CyberGuard Security Operations Engine v4.2', 'success');
-        addLog(`    Browser Agent: ${navigator.userAgent.substring(0, 50)}...`, 'output');
+        addLog('    Engine: CyberGuard Security Operations Engine v4.2.0-PROD', 'success');
         addLog(`    Timestamp: ${new Date().toISOString()}`, 'output');
         addLog('    Status: ALL SECURITY SCANNERS OPERATIONAL (0 ERRORS)', 'success');
         break;

@@ -3,7 +3,8 @@ import {
   Shield, ShieldAlert, ShieldCheck, Mail, Search, History, Terminal as TerminalIcon, 
   Zap, Lock, Bell, Users, Cpu, FileText, CheckCircle2, RefreshCw, Link2, 
   UploadCloud, Globe, Eye, Trash2, Server, Activity, FileCode, AlertTriangle, 
-  Download, Database, Key, Layers, Crosshair, Code, Filter, Check, X, ChevronRight 
+  Download, Database, Key, Layers, Crosshair, Code, Filter, Check, X, ChevronRight,
+  ArrowUpRight, Sparkles, Copy, FileJson
 } from 'lucide-react';
 import { User, ScanResult, OsintResult, HashAnalysisResult, SocIncident, CveRecord } from '../types';
 import Terminal from './Terminal';
@@ -72,13 +73,7 @@ export default function Dashboard({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Gmail Live Inbox Integration states
-  const [gmailMode, setGmailMode] = useState<'breach' | 'gmail'>('breach');
-  const [gmailMessages, setGmailMessages] = useState<any[]>([]);
-  const [gmailLoading, setGmailLoading] = useState(false);
-  const [gmailError, setGmailError] = useState<string | null>(null);
-  const [activeScanningId, setActiveScanningId] = useState<string | null>(null);
+  const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
 
   // General State
   const [scans, setScans] = useState<ScanResult[]>([]);
@@ -92,6 +87,11 @@ export default function Dashboard({
   const [isClearingScans, setIsClearingScans] = useState(false);
   const [clearScansSuccess, setClearScansSuccess] = useState(false);
 
+  const notifyCopy = (msg: string) => {
+    setCopiedNotification(msg);
+    setTimeout(() => setCopiedNotification(null), 2500);
+  };
+
   // Load Scan History & Data on Mount
   const loadHistory = async () => {
     try {
@@ -102,7 +102,7 @@ export default function Dashboard({
         const data = await safeJsonResponse(response);
         if (data?.scans) {
           setScans(data.scans);
-          if (data.scans.length > 0) {
+          if (data.scans.length > 0 && !currentScan) {
             setCurrentScan(data.scans[0]);
           }
         }
@@ -172,9 +172,8 @@ export default function Dashboard({
   }, []);
 
   // Handlers for Scanners
-  const handleScanEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!scanEmail || !scanEmail.includes('@')) {
+  const executeEmailScan = async (targetEmail: string) => {
+    if (!targetEmail || !targetEmail.includes('@')) {
       setError('Please provide a valid target email address.');
       return;
     }
@@ -184,7 +183,7 @@ export default function Dashboard({
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ email: scanEmail })
+        body: JSON.stringify({ email: targetEmail })
       });
       const data = await safeJsonResponse(res, 'Email breach assessment failed');
       if (data?.scan) {
@@ -199,9 +198,13 @@ export default function Dashboard({
     }
   };
 
-  const handleScanUrl = async (e: React.FormEvent) => {
+  const handleScanEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!scanUrl) {
+    executeEmailScan(scanEmail);
+  };
+
+  const executeUrlScan = async (targetUrl: string) => {
+    if (!targetUrl) {
       setError('Target URL is required.');
       return;
     }
@@ -211,7 +214,7 @@ export default function Dashboard({
       const res = await fetch('/api/scan-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ url: scanUrl })
+        body: JSON.stringify({ url: targetUrl })
       });
       const data = await safeJsonResponse(res, 'Link reputation inspection failed');
       if (data?.scan) {
@@ -226,6 +229,11 @@ export default function Dashboard({
     }
   };
 
+  const handleScanUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    executeUrlScan(scanUrl);
+  };
+
   const handleImageFileChange = (file: File) => {
     if (!file.type.startsWith('image/')) {
       setError('Selected artifact file must be a valid image format (PNG, JPG, WEBP).');
@@ -236,6 +244,37 @@ export default function Dashboard({
     const reader = new FileReader();
     reader.onload = () => setImagePreview(reader.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const handleLoadSampleInvoice = () => {
+    // Generate a simple synthetic sample canvas image for instant testing
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 200;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, 400, 200);
+      ctx.fillStyle = '#ef4444';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('URGENT: INVOICE PAYMENT DUE', 20, 40);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px monospace';
+      ctx.fillText('Amount: $4,850.00 USD', 20, 80);
+      ctx.fillText('Action: Verify wire transfer credentials', 20, 110);
+      ctx.fillText('Metamask Wallet seed phrase required', 20, 140);
+      ctx.fillStyle = '#00E5FF';
+      ctx.fillText('Target: CyberGuard Threat Lab Sample', 20, 175);
+    }
+    const sampleDataUrl = canvas.toDataURL('image/png');
+    setImagePreview(sampleDataUrl);
+    // Create a mock File object
+    const blobBin = atob(sampleDataUrl.split(',')[1]);
+    const array = [];
+    for (let i = 0; i < blobBin.length; i++) array.push(blobBin.charCodeAt(i));
+    const sampleFile = new File([new Uint8Array(array)], 'urgent_wire_invoice_sample.png', { type: 'image/png' });
+    setImageFile(sampleFile);
+    setError(null);
   };
 
   const handleScanImage = async (e: React.FormEvent) => {
@@ -270,11 +309,10 @@ export default function Dashboard({
     }
   };
 
-  const handleCveSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeCveSearch = async (query: string, severity: string = 'ALL') => {
     setCveLoading(true);
     try {
-      const res = await fetch(`/api/cve/search?query=${encodeURIComponent(cveQuery)}&severity=${cveSeverity}&limit=20`, {
+      const res = await fetch(`/api/cve/search?query=${encodeURIComponent(query)}&severity=${severity}&limit=20`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await safeJsonResponse(res, 'CVE query failed');
@@ -288,15 +326,19 @@ export default function Dashboard({
     }
   };
 
-  const handleOsintLookup = async (e: React.FormEvent) => {
+  const handleCveSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!osintTarget) return;
+    executeCveSearch(cveQuery, cveSeverity);
+  };
+
+  const executeOsintLookup = async (target: string) => {
+    if (!target) return;
     setOsintLoading(true);
     try {
       const res = await fetch('/api/soc/osint-lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ target: osintTarget })
+        body: JSON.stringify({ target })
       });
       const data = await safeJsonResponse(res, 'OSINT inspection failed');
       if (data) setOsintResult(data);
@@ -307,15 +349,19 @@ export default function Dashboard({
     }
   };
 
-  const handleHashLookup = async (e: React.FormEvent) => {
+  const handleOsintLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hashInput) return;
+    executeOsintLookup(osintTarget);
+  };
+
+  const executeHashLookup = async (hash: string, fileName?: string) => {
+    if (!hash) return;
     setHashLoading(true);
     try {
       const res = await fetch('/api/soc/hash-lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ hash: hashInput, fileName: hashFileName })
+        body: JSON.stringify({ hash, fileName: fileName || hashFileName })
       });
       const data = await safeJsonResponse(res, 'Malware hash forensics failed');
       if (data) setHashResult(data);
@@ -324,6 +370,11 @@ export default function Dashboard({
     } finally {
       setHashLoading(false);
     }
+  };
+
+  const handleHashLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    executeHashLookup(hashInput, hashFileName);
   };
 
   const handleTriageSubmit = async (e: React.FormEvent) => {
@@ -350,17 +401,17 @@ export default function Dashboard({
     }
   };
 
-  const handleStixExport = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleStixExport = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setStixLoading(true);
     try {
       const res = await fetch('/api/soc/stix-export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
-          target: stixTarget,
-          hash: stixHash,
-          notes: stixNotes
+          target: stixTarget || 'malicious-c2-node.org',
+          hash: stixHash || '44d88612fea8a8f36de82e1278abb02f',
+          notes: stixNotes || 'Forensic threat indicator extracted via CyberGuard Workstation'
         })
       });
       const data = await safeJsonResponse(res);
@@ -370,6 +421,17 @@ export default function Dashboard({
     } finally {
       setStixLoading(false);
     }
+  };
+
+  const handleDownloadStixJson = () => {
+    if (!stixBundleResult) return;
+    const blob = new Blob([JSON.stringify(stixBundleResult, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cyberguard_stix21_bundle_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleWipeScans = async () => {
@@ -415,7 +477,7 @@ export default function Dashboard({
     }
 
     return (
-      <div className="font-mono text-xs flex flex-wrap items-center gap-3 bg-[#090D14] p-2.5 border border-[#263147] rounded-sm">
+      <div className="font-mono text-xs flex flex-wrap items-center justify-between gap-3 bg-[#090D14] p-2.5 border border-[#263147] rounded-sm">
         <span className={colorClass}>[{filledStr}{emptyStr}]</span>
         <span className={`font-bold uppercase tracking-wider ${colorClass}`}>
           RISK INDEX: {score}/100 • {label}
@@ -427,7 +489,7 @@ export default function Dashboard({
   return (
     <div className="space-y-4 font-sans text-[#ECEFF4]">
       
-      {/* SIEM COMMAND SUMMARY STRIP (Compact operational metrics) */}
+      {/* SIEM COMMAND SUMMARY STRIP */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono">
         <div className="soc-panel p-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -462,11 +524,14 @@ export default function Dashboard({
             <ShieldCheck className="w-4 h-4 text-[#00E676]" />
             <span className="text-[#7E8B9B] uppercase font-semibold text-[10px]">STIX 2.1 Engine</span>
           </div>
-          <span className="font-bold text-[#00E676] text-sm">ACTIVE</span>
+          <span className="font-bold text-[#00E676] text-sm flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-[#00E676] animate-pulse"></span>
+            ACTIVE
+          </span>
         </div>
       </div>
 
-      {/* VECTOR TAB MODULE SELECTOR (8 Functional Security Scanners) */}
+      {/* VECTOR TAB MODULE SELECTOR */}
       <div className="soc-panel p-1.5 flex flex-wrap gap-1 border border-[#263147] text-[11px] font-mono font-bold">
         {[
           { id: 'email', label: 'EMAIL BREACH', icon: Mail },
@@ -514,7 +579,7 @@ export default function Dashboard({
                 <span className="status-chip status-chip-low">ACTIVE</span>
               </div>
               <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
-                Queries deterministic static leak databases matching target identity strings against historical exposure records.
+                Queries deterministic leak records and analyzes compromised account exposures, leaked credential types, and mitigation steps.
               </p>
               
               <form onSubmit={handleScanEmail} className="space-y-3 pt-1">
@@ -527,9 +592,43 @@ export default function Dashboard({
                     value={scanEmail}
                     onChange={(e) => setScanEmail(e.target.value)}
                     placeholder="analyst@enterprise-domain.com"
-                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono focus:border-[#00E5FF] focus:outline-none"
                     required
                   />
+                </div>
+
+                {/* 1-Click Quick Test Presets */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-[#00E5FF]" />
+                    <span>Quick Test Presets (1-Click)</span>
+                  </span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const email = 'user@yahoo.com';
+                        setScanEmail(email);
+                        executeEmailScan(email);
+                      }}
+                      className="text-left bg-[#181F2E] border border-[#263147] hover:border-[#FF334B] hover:text-white px-2 py-1.5 rounded-sm font-mono text-[10px] text-[#ECEFF4] transition-colors cursor-pointer"
+                    >
+                      <span className="text-[#FF334B] font-bold block">🚨 Leaked Target</span>
+                      <span className="text-[#7E8B9B] text-[9px]">user@yahoo.com</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const email = 'secure@cyberguard.com';
+                        setScanEmail(email);
+                        executeEmailScan(email);
+                      }}
+                      className="text-left bg-[#181F2E] border border-[#263147] hover:border-[#00E676] hover:text-white px-2 py-1.5 rounded-sm font-mono text-[10px] text-[#ECEFF4] transition-colors cursor-pointer"
+                    >
+                      <span className="text-[#00E676] font-bold block">🟢 Clean Target</span>
+                      <span className="text-[#7E8B9B] text-[9px]">secure@cyberguard.com</span>
+                    </button>
+                  </div>
                 </div>
 
                 {error && (
@@ -562,7 +661,7 @@ export default function Dashboard({
                 <span className="status-chip status-chip-low">ACTIVE</span>
               </div>
               <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
-                Deterministic rule engine inspecting target URL structures, domain age, typosquatting indicators, and SSL attributes.
+                Deterministic rule engine inspecting target URL structures, domain age, typosquatting indicators, redirect hops, and SSL certificates.
               </p>
 
               <form onSubmit={handleScanUrl} className="space-y-3 pt-1">
@@ -571,14 +670,55 @@ export default function Dashboard({
                     Target URL / Host Domain
                   </label>
                   <input
-                    type="url"
+                    type="text"
                     value={scanUrl}
                     onChange={(e) => setScanUrl(e.target.value)}
                     placeholder="https://suspicious-verify-auth.com"
-                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono focus:border-[#00E5FF] focus:outline-none"
                     required
                   />
                 </div>
+
+                {/* 1-Click Quick Test Presets */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-[#00E5FF]" />
+                    <span>Quick Test Presets (1-Click)</span>
+                  </span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = 'https://paypa1-secure-login.xyz/verify';
+                        setScanUrl(url);
+                        executeUrlScan(url);
+                      }}
+                      className="text-left bg-[#181F2E] border border-[#263147] hover:border-[#FF334B] hover:text-white px-2 py-1.5 rounded-sm font-mono text-[10px] text-[#ECEFF4] transition-colors cursor-pointer"
+                    >
+                      <span className="text-[#FF334B] font-bold block">🚨 Phishing Typosquat</span>
+                      <span className="text-[#7E8B9B] text-[9px] truncate block">paypa1-login.xyz</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = 'https://google.com';
+                        setScanUrl(url);
+                        executeUrlScan(url);
+                      }}
+                      className="text-left bg-[#181F2E] border border-[#263147] hover:border-[#00E676] hover:text-white px-2 py-1.5 rounded-sm font-mono text-[10px] text-[#ECEFF4] transition-colors cursor-pointer"
+                    >
+                      <span className="text-[#00E676] font-bold block">🟢 Legitimate Portal</span>
+                      <span className="text-[#7E8B9B] text-[9px] truncate block">https://google.com</span>
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="p-2 bg-[#FF334B]/10 border border-[#FF334B]/30 text-[#FF334B] text-[11px] font-mono flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -592,7 +732,7 @@ export default function Dashboard({
             </div>
           )}
 
-          {/* TAB 3: VISUAL OCR & STGANOGRAPHY SCANNER */}
+          {/* TAB 3: VISUAL OCR & FILE SCANNER */}
           {activeTab === 'image' && (
             <div className="soc-panel p-4 space-y-3">
               <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
@@ -600,8 +740,11 @@ export default function Dashboard({
                   <FileText className="w-4 h-4 text-[#00E5FF]" />
                   <span>Visual Payload Inspector</span>
                 </h2>
-                <span className="status-chip status-chip-low">OCR ENGINE</span>
+                <span className="status-chip status-chip-low">OCR & HASH</span>
               </div>
+              <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
+                Computes cryptographic image signatures (SHA-256 / MD5), inspects metadata, and evaluates OCR heuristic lures.
+              </p>
 
               <form onSubmit={handleScanImage} className="space-y-3">
                 <div
@@ -633,9 +776,24 @@ export default function Dashboard({
                   </span>
                 </div>
 
+                {/* 1-Click Synthetic Sample Button */}
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handleLoadSampleInvoice}
+                    className="btn-soc px-2.5 py-1 text-[10px] flex items-center gap-1 text-[#00E5FF] border-[#00E5FF]/40 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>LOAD SAMPLE INVOICE PAYLOAD</span>
+                  </button>
+                  {imageFile && (
+                    <span className="text-[10px] font-mono text-[#00E676]">Payload Ready</span>
+                  )}
+                </div>
+
                 {imagePreview && (
                   <div className="border border-[#263147] bg-[#090D14] p-1 text-center">
-                    <img src={imagePreview} alt="Artifact preview" className="max-h-28 mx-auto object-contain" />
+                    <img src={imagePreview} alt="Artifact preview" className="max-h-28 mx-auto object-contain rounded-xs" />
                   </div>
                 )}
 
@@ -645,7 +803,7 @@ export default function Dashboard({
                   className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>{loading ? 'ANALYZING VISUAL TEXT...' : 'EXECUTE VISUAL INSPECTION'}</span>
+                  <span>{loading ? 'ANALYZING VISUAL PAYLOAD...' : 'EXECUTE VISUAL INSPECTION'}</span>
                 </button>
               </form>
             </div>
@@ -661,6 +819,9 @@ export default function Dashboard({
                 </h2>
                 <span className="status-chip status-chip-medium">LIVE NVD FEED</span>
               </div>
+              <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
+                Query official CVE vulnerability records, CVSS scores, vector strings, and technical descriptions.
+              </p>
 
               <form onSubmit={handleCveSearch} className="space-y-3">
                 <div className="space-y-1">
@@ -671,9 +832,38 @@ export default function Dashboard({
                     type="text"
                     value={cveQuery}
                     onChange={(e) => setCveQuery(e.target.value)}
-                    placeholder="Log4j, OpenSSL, Apache, CVE-2023-..."
-                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    placeholder="Log4j, OpenSSL, Apache, CVE-2024-..."
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono focus:border-[#00E5FF] focus:outline-none"
                   />
+                </div>
+
+                {/* 1-Click Quick CVE Preset Chips */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Quick Attack Vectors:
+                  </span>
+                  <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                    {[
+                      { name: 'Log4j (CVSS 10.0)', query: 'Log4j' },
+                      { name: 'OpenSSL (Buffer Overflow)', query: 'OpenSSL' },
+                      { name: 'XZ Utils (SSH Backdoor)', query: 'CVE-2024-3094' },
+                      { name: 'Fortinet (FortiOS)', query: 'Fortinet' },
+                      { name: 'Citrix Bleed', query: 'Citrix' },
+                      { name: 'Apache HTTP', query: 'Apache' },
+                    ].map((item, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setCveQuery(item.query);
+                          executeCveSearch(item.query, cveSeverity);
+                        }}
+                        className="bg-[#181F2E] border border-[#263147] hover:border-[#00E5FF] hover:text-[#00E5FF] px-2 py-0.5 rounded-sm text-[#ECEFF4] transition-colors cursor-pointer"
+                      >
+                        {item.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -682,8 +872,11 @@ export default function Dashboard({
                   </label>
                   <select
                     value={cveSeverity}
-                    onChange={(e) => setCveSeverity(e.target.value)}
-                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] rounded-sm font-mono"
+                    onChange={(e) => {
+                      setCveSeverity(e.target.value);
+                      executeCveSearch(cveQuery, e.target.value);
+                    }}
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] rounded-sm font-mono focus:border-[#00E5FF] focus:outline-none"
                   >
                     <option value="ALL">ALL SEVERITIES</option>
                     <option value="CRITICAL">CRITICAL ONLY (9.0+)</option>
@@ -698,7 +891,7 @@ export default function Dashboard({
                   className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Search className="w-3.5 h-3.5" />
-                  <span>{cveLoading ? 'QUERYING NVD API...' : 'SEARCH NIST CVE DB'}</span>
+                  <span>{cveLoading ? 'QUERYING NVD DATABASE...' : 'SEARCH NIST CVE DB'}</span>
                 </button>
               </form>
             </div>
@@ -714,6 +907,9 @@ export default function Dashboard({
                 </h2>
                 <span className="status-chip status-chip-low">DNS & REPUTATION</span>
               </div>
+              <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
+                Resolves DNS records, blacklist status, open service ports, and autonomous system numbers (ASN).
+              </p>
 
               <form onSubmit={handleOsintLookup} className="space-y-3">
                 <div className="space-y-1">
@@ -725,9 +921,35 @@ export default function Dashboard({
                     value={osintTarget}
                     onChange={(e) => setOsintTarget(e.target.value)}
                     placeholder="185.220.101.5 or domain.com"
-                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono focus:border-[#00E5FF] focus:outline-none"
                     required
                   />
+                </div>
+
+                {/* 1-Click Quick Presets */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Sample Targets:
+                  </span>
+                  <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                    {[
+                      { name: '185.220.101.5 (Tor Exit)', target: '185.220.101.5' },
+                      { name: '8.8.8.8 (Google DNS)', target: '8.8.8.8' },
+                      { name: 'github.com', target: 'github.com' }
+                    ].map((item, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setOsintTarget(item.target);
+                          executeOsintLookup(item.target);
+                        }}
+                        className="bg-[#181F2E] border border-[#263147] hover:border-[#00E5FF] hover:text-[#00E5FF] px-2 py-0.5 rounded-sm text-[#ECEFF4] transition-colors cursor-pointer"
+                      >
+                        {item.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <button
@@ -752,6 +974,9 @@ export default function Dashboard({
                 </h2>
                 <span className="status-chip status-chip-high">SHA256 / YARA</span>
               </div>
+              <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
+                Calculates Shannon entropy, inspects PE header magic bytes, evaluates YARA detection rules, and outputs quarantine guidance.
+              </p>
 
               <form onSubmit={handleHashLookup} className="space-y-3">
                 <div className="space-y-1">
@@ -762,10 +987,43 @@ export default function Dashboard({
                     type="text"
                     value={hashInput}
                     onChange={(e) => setHashInput(e.target.value)}
-                    placeholder="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    placeholder="44d88612fea8a8f36de82e1278abb02f"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono focus:border-[#00E5FF] focus:outline-none"
                     required
                   />
+                </div>
+
+                {/* 1-Click Quick Presets */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
+                    Sample Hashes:
+                  </span>
+                  <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const h = '44d88612fea8a8f36de82e1278abb02f';
+                        setHashInput(h);
+                        setHashFileName('AsyncRAT_Trojan_dropper.exe');
+                        executeHashLookup(h, 'AsyncRAT_Trojan_dropper.exe');
+                      }}
+                      className="bg-[#181F2E] border border-[#FF334B]/50 hover:border-[#FF334B] px-2 py-0.5 rounded-sm text-[#FF334B] transition-colors cursor-pointer"
+                    >
+                      🚨 AsyncRAT Dropper MD5
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const h = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+                        setHashInput(h);
+                        setHashFileName('clean_specification.pdf');
+                        executeHashLookup(h, 'clean_specification.pdf');
+                      }}
+                      className="bg-[#181F2E] border border-[#00E676]/50 hover:border-[#00E676] px-2 py-0.5 rounded-sm text-[#00E676] transition-colors cursor-pointer"
+                    >
+                      🟢 Clean File SHA-256
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -777,7 +1035,7 @@ export default function Dashboard({
                     value={hashFileName}
                     onChange={(e) => setHashFileName(e.target.value)}
                     placeholder="payload_dropper.exe"
-                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono focus:border-[#00E5FF] focus:outline-none"
                   />
                 </div>
 
@@ -804,7 +1062,7 @@ export default function Dashboard({
                 <span className="status-chip status-chip-critical">INCIDENT MATRIX</span>
               </div>
               <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
-                Active security incident triage queue with MITRE ATT&CK tactical tagging and automated containment options.
+                Active security incident triage queue with MITRE ATT&CK tactical tagging and automated containment controls.
               </p>
 
               <button
@@ -828,6 +1086,9 @@ export default function Dashboard({
                 </h2>
                 <span className="status-chip status-chip-low">STIX SPEC v2.1</span>
               </div>
+              <p className="text-[11px] text-[#7E8B9B] font-mono leading-relaxed">
+                Export standard Structured Threat Information Expression (STIX 2.1) JSON bundles for interoperability with SIEMs.
+              </p>
 
               <form onSubmit={handleStixExport} className="space-y-3">
                 <div className="space-y-1">
@@ -838,8 +1099,8 @@ export default function Dashboard({
                     type="text"
                     value={stixTarget}
                     onChange={(e) => setStixTarget(e.target.value)}
-                    placeholder="malicious-domain.com"
-                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
+                    placeholder="malicious-c2-node.org"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono focus:border-[#00E5FF] focus:outline-none"
                   />
                 </div>
 
@@ -851,20 +1112,8 @@ export default function Dashboard({
                     type="text"
                     value={stixHash}
                     onChange={(e) => setStixHash(e.target.value)}
-                    placeholder="e3b0c44298fc1c149afbf4c89..."
-                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase text-[#7E8B9B] font-bold block">
-                    Forensic Notes
-                  </label>
-                  <textarea
-                    value={stixNotes}
-                    onChange={(e) => setStixNotes(e.target.value)}
-                    placeholder="Official evidence collected during threat triage..."
-                    className="w-full bg-[#090D14] border border-[#263147] p-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono h-16"
+                    placeholder="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    className="w-full bg-[#090D14] border border-[#263147] px-3 py-2 text-xs text-[#ECEFF4] placeholder-[#7E8B9B]/50 rounded-sm font-mono focus:border-[#00E5FF] focus:outline-none"
                   />
                 </div>
 
@@ -874,7 +1123,7 @@ export default function Dashboard({
                   className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Code className="w-3.5 h-3.5" />
-                  <span>{stixLoading ? 'GENERATING BUNDLE...' : 'EXPORT STIX 2.1 BUNDLE'}</span>
+                  <span>{stixLoading ? 'GENERATING BUNDLE...' : 'GENERATE STIX 2.1 BUNDLE'}</span>
                 </button>
               </form>
             </div>
@@ -888,7 +1137,7 @@ export default function Dashboard({
             </div>
             <button
               onClick={() => setShowTerminal(!showTerminal)}
-              className="btn-soc px-2.5 py-1 text-[10px]"
+              className="btn-soc px-2.5 py-1 text-[10px] cursor-pointer"
             >
               {showTerminal ? 'HIDE SHELL' : 'LAUNCH SHELL (Ctrl+~)'}
             </button>
@@ -917,10 +1166,10 @@ export default function Dashboard({
                 {/* Raw JSON vs Annotated Switcher */}
                 <button
                   onClick={() => setRawViewMode(!rawViewMode)}
-                  className={`btn-soc px-2 py-1 text-[10px] flex items-center gap-1 ${rawViewMode ? 'border-[#00E5FF] text-[#00E5FF]' : ''}`}
+                  className={`btn-soc px-2 py-1 text-[10px] flex items-center gap-1 cursor-pointer ${rawViewMode ? 'border-[#00E5FF] text-[#00E5FF]' : ''}`}
                 >
                   <Code className="w-3 h-3" />
-                  <span>{rawViewMode ? 'ANNOTATED VIEW' : 'RAW STIX / JSON'}</span>
+                  <span>{rawViewMode ? 'ANNOTATED VIEW' : 'RAW JSON'}</span>
                 </button>
               </div>
 
@@ -969,10 +1218,10 @@ export default function Dashboard({
                     </span>
                     <button
                       onClick={() => onSelectReport(currentScan)}
-                      className="btn-soc px-3 py-1 text-[10px] flex items-center gap-1 text-[#00E5FF] border-[#00E5FF]/40"
+                      className="btn-soc px-3 py-1 text-[10px] flex items-center gap-1 text-[#00E5FF] border-[#00E5FF]/40 cursor-pointer"
                     >
                       <Eye className="w-3 h-3" />
-                      <span>FULL FORENSIC REPORT</span>
+                      <span>FULL FORENSIC REPORT & PDF</span>
                     </button>
                   </div>
                 </div>
@@ -1000,14 +1249,14 @@ export default function Dashboard({
                     <div key={cve.id} className="border border-[#263147] bg-[#090D14] p-3 rounded-sm space-y-1.5 font-mono text-xs">
                       <div className="flex items-center justify-between">
                         <strong className="text-[#00E5FF] font-bold">{cve.id}</strong>
-                        <span className={`status-chip ${cve.cvssScore >= 9.0 ? 'status-chip-critical' : cve.cvssScore >= 7.0 ? 'status-chip-high' : 'status-chip-medium'}`}>
-                          CVSS {cve.cvssScore}
+                        <span className={`status-chip ${cve.score >= 9.0 ? 'status-chip-critical' : cve.score >= 7.0 ? 'status-chip-high' : 'status-chip-medium'}`}>
+                          CVSS {cve.score.toFixed(1)} [{cve.severity}]
                         </span>
                       </div>
                       <p className="text-[11px] text-[#ECEFF4] leading-relaxed">{cve.description}</p>
-                      {cve.cvssVector && (
+                      {cve.vectorString && (
                         <div className="text-[9px] text-[#7E8B9B] truncate">
-                          VECTOR: {cve.cvssVector}
+                          VECTOR: {cve.vectorString}
                         </div>
                       )}
                     </div>
@@ -1015,7 +1264,7 @@ export default function Dashboard({
                 </div>
               ) : (
                 <div className="py-8 text-center font-mono text-xs text-[#7E8B9B]">
-                  No CVE records found. Enter a keyword or technology name to search NVD.
+                  No CVE records found. Select a quick preset above to search NVD.
                 </div>
               )}
             </div>
@@ -1149,7 +1398,7 @@ export default function Dashboard({
                     <select
                       value={triageStatus}
                       onChange={(e) => setTriageStatus(e.target.value as any)}
-                      className="bg-[#090D14] border border-[#263147] p-1.5 text-xs text-[#ECEFF4] font-mono"
+                      className="bg-[#090D14] border border-[#263147] p-1.5 text-xs text-[#ECEFF4] font-mono focus:border-[#00E5FF] focus:outline-none"
                     >
                       <option value="investigating">INVESTIGATING</option>
                       <option value="mitigated">MITIGATED / CONTAINED</option>
@@ -1162,7 +1411,7 @@ export default function Dashboard({
                       value={containmentActionInput}
                       onChange={(e) => setContainmentActionInput(e.target.value)}
                       placeholder="Containment action (e.g. Block IP)"
-                      className="bg-[#090D14] border border-[#263147] p-1.5 text-xs text-[#ECEFF4] font-mono"
+                      className="bg-[#090D14] border border-[#263147] p-1.5 text-xs text-[#ECEFF4] font-mono focus:border-[#00E5FF] focus:outline-none"
                     />
                   </div>
 
@@ -1171,10 +1420,10 @@ export default function Dashboard({
                     value={triageNote}
                     onChange={(e) => setTriageNote(e.target.value)}
                     placeholder="Analyst triage note..."
-                    className="w-full bg-[#090D14] border border-[#263147] p-1.5 text-xs text-[#ECEFF4] font-mono"
+                    className="w-full bg-[#090D14] border border-[#263147] p-1.5 text-xs text-[#ECEFF4] font-mono focus:border-[#00E5FF] focus:outline-none"
                   />
 
-                  <button type="submit" className="w-full btn-soc btn-soc-primary py-1.5 text-xs">
+                  <button type="submit" className="w-full btn-soc btn-soc-primary py-1.5 text-xs cursor-pointer">
                     UPDATE INCIDENT STATUS
                   </button>
                 </form>
@@ -1183,17 +1432,32 @@ export default function Dashboard({
           )}
 
           {/* DISPLAY STIX BUNDLE RESULT */}
-          {activeTab === 'stix' && stixBundleResult && (
+          {activeTab === 'stix' && (
             <div className="soc-panel p-4 space-y-3">
               <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
                 <h3 className="font-display font-bold text-sm uppercase text-white">
                   STIX 2.1 JSON Evidence Bundle
                 </h3>
-                <span className="status-chip status-chip-low">VALIDATED STIX JSON</span>
+                {stixBundleResult && (
+                  <button
+                    onClick={handleDownloadStixJson}
+                    className="btn-soc px-2.5 py-1 text-[10px] flex items-center gap-1 text-[#00E676] border-[#00E676]/40 cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>DOWNLOAD JSON</span>
+                  </button>
+                )}
               </div>
-              <div className="bg-[#090D14] border border-[#263147] p-3 rounded-sm font-mono text-[11px] overflow-x-auto text-[#00E5FF] max-h-96">
-                <pre>{JSON.stringify(stixBundleResult, null, 2)}</pre>
-              </div>
+
+              {stixBundleResult ? (
+                <div className="bg-[#090D14] border border-[#263147] p-3 rounded-sm font-mono text-[11px] overflow-x-auto text-[#00E5FF] max-h-96">
+                  <pre>{JSON.stringify(stixBundleResult, null, 2)}</pre>
+                </div>
+              ) : (
+                <div className="py-8 text-center font-mono text-xs text-[#7E8B9B]">
+                  Click "Generate STIX 2.1 Bundle" on the left panel to produce a standardized DFIR evidence bundle.
+                </div>
+              )}
             </div>
           )}
 
@@ -1202,9 +1466,53 @@ export default function Dashboard({
 
         </div>
 
-        {/* RIGHT COLUMN: TRUST COMPLIANCE (3 cols) */}
+        {/* RIGHT COLUMN: TRUST COMPLIANCE & RECENT THREAT LOGS (3 cols) */}
         <div className="lg:col-span-3 space-y-4">
           
+          {/* Quick Scan History Feed */}
+          <div className="soc-panel p-4 space-y-3">
+            <div className="border-b border-[#263147] pb-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[#00E5FF] font-mono text-[10px] font-bold">
+                <History className="w-3.5 h-3.5" />
+                <span>RECENT SESSIONS</span>
+              </div>
+              <span className="text-[10px] font-mono text-[#7E8B9B]">{scans.length} Total</span>
+            </div>
+
+            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+              {scans.length > 0 ? (
+                scans.slice(0, 6).map(s => (
+                  <div
+                    key={s.id}
+                    onClick={() => {
+                      setCurrentScan(s);
+                      if (s.scanType === 'link') setActiveTab('link');
+                      else if (s.scanType === 'image') setActiveTab('image');
+                      else setActiveTab('email');
+                    }}
+                    className="p-2 border border-[#263147] bg-[#090D14] hover:border-[#00E5FF] rounded-sm cursor-pointer transition-colors font-mono text-[11px]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-white font-bold truncate max-w-[140px]">
+                        {s.targetEmail || s.targetLink || s.imageFileName || 'Assessment'}
+                      </span>
+                      <span className={`text-[10px] font-bold ${s.riskScore >= 70 ? 'text-[#FF334B]' : s.riskScore >= 40 ? 'text-[#FF9900]' : 'text-[#00E676]'}`}>
+                        {s.riskScore}/100
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-[#7E8B9B] block mt-0.5">
+                      {new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {s.scanType?.toUpperCase() || 'EMAIL'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-[10px] font-mono text-[#7E8B9B]">
+                  No scans recorded yet.
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Trust, Privacy & Compliance Center */}
           <div className="soc-panel p-4 space-y-3">
             <div className="border-b border-[#263147] pb-2">

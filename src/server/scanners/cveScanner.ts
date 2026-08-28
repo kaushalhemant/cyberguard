@@ -228,7 +228,7 @@ const FALLBACK_CVE_RECORDS: CveRecord[] = [
 async function fetchNistApiCves(query: string, limit: number = 20): Promise<CveRecord[] | null> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
 
     const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=${encodeURIComponent(query)}&resultsPerPage=${limit}`;
     const response = await fetch(url, { signal: controller.signal });

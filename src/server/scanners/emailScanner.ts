@@ -33,13 +33,21 @@ function extractDomainFromEmail(emailStr: string): string | null {
   return match ? match[1].toLowerCase() : null;
 }
 
+async function resolveTxtWithTimeout(domain: string, timeoutMs: number = 1500): Promise<string[][]> {
+  const queryPromise = dns.resolveTxt(domain);
+  const timeoutPromise = new Promise<string[][]>((_, reject) =>
+    setTimeout(() => reject(new Error('DNS query timeout')), timeoutMs)
+  );
+  return Promise.race([queryPromise, timeoutPromise]);
+}
+
 /**
  * Perform live DNS TXT lookup for SPF (v=spf1) record.
  * Security Reasoning: SPF (Sender Policy Framework) specifies authorized mail servers for a domain.
  */
 async function checkSpfDns(domain: string): Promise<{ status: 'PASS' | 'FAIL' | 'NEUTRAL' | 'NONE'; record?: string; reasoning: string }> {
   try {
-    const txtRecords = await dns.resolveTxt(domain);
+    const txtRecords = await resolveTxtWithTimeout(domain, 1500);
     const flatRecords = txtRecords.map(r => r.join(''));
     const spfRecord = flatRecords.find(r => r.startsWith('v=spf1'));
 
@@ -65,7 +73,7 @@ async function checkSpfDns(domain: string): Promise<{ status: 'PASS' | 'FAIL' | 
 async function checkDmarcDns(domain: string): Promise<{ status: 'PASS' | 'FAIL' | 'NONE'; record?: string; policy?: string; reasoning: string }> {
   try {
     const dmarcDomain = `_dmarc.${domain}`;
-    const txtRecords = await dns.resolveTxt(dmarcDomain);
+    const txtRecords = await resolveTxtWithTimeout(dmarcDomain, 1500);
     const flatRecords = txtRecords.map(r => r.join(''));
     const dmarcRecord = flatRecords.find(r => r.startsWith('v=DMARC1'));
 
