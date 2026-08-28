@@ -27,6 +27,14 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Normalize req.url so that routes match whether incoming with /api prefix or stripped by serverless router
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (!req.url.startsWith('/api') && !req.url.startsWith('/assets') && !req.url.startsWith('/@') && !req.url.startsWith('/src') && req.url !== '/' && !req.url.startsWith('/index.html') && !req.url.startsWith('/favicon')) {
+    req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+  }
+  next();
+});
+
 // Master Admin Security Configurations
 const JWT_SECRET = getEnv('JWT_SECRET', 'cyberguard-secure-secret-token-key-749');
 

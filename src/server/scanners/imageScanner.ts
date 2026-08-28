@@ -2,7 +2,6 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import exifr from 'exifr';
-import { createWorker } from 'tesseract.js';
 import { ScanRiskReport, TriggeredFlag, RiskLevel } from '../../types/scanners';
 
 /**
@@ -102,39 +101,43 @@ export async function scanImage(
     // EXIF metadata absent or non-JPEG format
   }
 
-  // 3. OPEN-SOURCE OCR TEXT EXTRACTION (TESSERACT.JS)
-  // Security Reasoning: Attackers render phishing texts inside images (e.g., fake invoice PDFs converted to PNG) to bypass text-based email filters. Optical Character Recognition (OCR) recovers the hidden text.
+  // 3. OPTICAL CHARACTER RECOGNITION (OCR) EXTRACTION (DYNAMIC)
+  // Security Reasoning: Attackers render phishing texts inside images to bypass text-based filters.
   let ocrText = '';
   const ocrPhishingKeywordsFound: string[] = [];
 
   try {
-    let worker;
-    try {
-      worker = await createWorker('eng', 1, { cachePath: process.cwd() });
-    } catch {
-      worker = await createWorker('eng');
-    }
-    const ret = await worker.recognize(inputBuffer);
-    ocrText = ret.data.text || '';
-    await worker.terminate();
+    const tesseract = await import('tesseract.js');
+    const createWorker = tesseract.createWorker;
+    if (createWorker) {
+      let worker;
+      try {
+        worker = await createWorker('eng', 1, { cachePath: process.cwd() });
+      } catch {
+        worker = await createWorker('eng');
+      }
+      const ret = await worker.recognize(inputBuffer);
+      ocrText = ret.data.text || '';
+      await worker.terminate();
 
-    if (ocrText.trim()) {
-      for (const patternObj of OCR_PHISHING_PATTERNS) {
-        if (patternObj.pattern.test(ocrText)) {
-          ocrPhishingKeywordsFound.push(patternObj.name);
-          flags.push({
-            id: `FLAG-OCR-${patternObj.name.replace(/\s+/g, '-').toUpperCase()}`,
-            name: patternObj.name,
-            severity: patternObj.weight >= 30 ? 'HIGH' : 'MEDIUM',
-            weight: patternObj.weight,
-            description: `OCR text extraction identified phishing lure keyword: "${patternObj.name}".`,
-            securityReasoning: 'Phishing kits render text inside image files to defeat static keyword filters. Extracting OCR text uncovers hidden financial and credential harvesting traps.'
-          });
+      if (ocrText.trim()) {
+        for (const patternObj of OCR_PHISHING_PATTERNS) {
+          if (patternObj.pattern.test(ocrText)) {
+            ocrPhishingKeywordsFound.push(patternObj.name);
+            flags.push({
+              id: `FLAG-OCR-${patternObj.name.replace(/\s+/g, '-').toUpperCase()}`,
+              name: patternObj.name,
+              severity: patternObj.weight >= 30 ? 'HIGH' : 'MEDIUM',
+              weight: patternObj.weight,
+              description: `OCR text extraction identified phishing lure keyword: "${patternObj.name}".`,
+              securityReasoning: 'Phishing kits render text inside image files to defeat static keyword filters. Extracting OCR text uncovers hidden financial and credential harvesting traps.'
+            });
+          }
         }
       }
     }
   } catch (ocrErr) {
-    console.warn('[ImageScanner] OCR extraction notice:', ocrErr);
+    // OCR is optional in serverless and falls back gracefully to hash, EXIF, and heuristic detection
   }
 
   // 4. FILENAME PATTERN HEURISTICS
