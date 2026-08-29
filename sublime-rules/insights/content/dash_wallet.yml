@@ -1,8 +1,0 @@
-name: "Cryptocurrency address: Dash"
-type: "query"
-source: |
-  regex.contains(body.current_thread.text, '\b0x[a-fA-F0-9]{40}\b')
-severity: "low"
-tags:
-  - "Cryptocurrency Address"
-  - "Dash Wallet"

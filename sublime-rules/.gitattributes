@@ -1,3 +1,0 @@
-*.yar linguist-detectable=false
-*.yml linguist-detectable=true
-*.yml linguist-language=YAML

@@ -1,8 +1,0 @@
-name: "Cryptocurrency address: Litecoin"
-type: "query"
-source: |
-  regex.contains(body.current_thread.text, '\b[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}\b')
-severity: "low"
-tags:
-  - "Cryptocurrency Address"
-  - "Litecoin Address"
