@@ -12,6 +12,16 @@ import PrivacyStatementModal from './PrivacyStatementModal';
 import UsageAudit from './UsageAudit';
 import { safeJsonResponse } from '../lib/api';
 import { generateScanPdf } from '../lib/pdfGenerator';
+import {
+  clientLookupEmail,
+  clientAnalyzeUrl,
+  clientAnalyzeImage,
+  clientSearchCves,
+  clientAnalyzeOsint,
+  clientAnalyzeHash,
+  clientGenerateStix,
+  CLIENT_PREINDEXED_CVES
+} from '../lib/clientThreatEngine';
 
 interface DashboardProps {
   user: User;
@@ -123,13 +133,15 @@ export default function Dashboard({
         const data = await safeJsonResponse(res);
         if (data?.cves) {
           setCveResults({ totalMatches: data.cves.length, cves: data.cves });
+          return;
         }
       }
-    } catch (err) {
-      console.warn('Failed to load CVE feed:', err);
+    } catch {
+      // Fallback to client pre-indexed CVE records
     } finally {
       setCveLoading(false);
     }
+    setCveResults({ totalMatches: CLIENT_PREINDEXED_CVES.length, cves: CLIENT_PREINDEXED_CVES });
   };
 
   const fetchIncidents = async () => {
@@ -145,13 +157,52 @@ export default function Dashboard({
           if (data.incidents.length > 0 && !selectedIncident) {
             setSelectedIncident(data.incidents[0]);
           }
+          return;
         }
       }
-    } catch (err) {
-      console.warn('Failed to fetch SIEM incidents:', err);
+    } catch {
+      // Fallback
     } finally {
       setIncidentsLoading(false);
     }
+
+    // Default static SIEM incident records for GitHub Pages
+    const staticIncidents: SocIncident[] = [
+      {
+        id: 'INC-2026-9042',
+        title: 'Phishing Campaign targeting Executive SSO',
+        target: 'paypa1-secure-login.xyz',
+        severity: 'critical',
+        status: 'investigating',
+        category: 'Phishing',
+        mitreTactic: 'Initial Access',
+        mitreTechniqueId: 'T1566.002 (Spearphishing Link)',
+        description: 'Active phishing URL attempting credential harvesting against corporate SSO portal.',
+        affectedAsset: 'Enterprise Identity Provider',
+        assignedOfficer: 'Officer CyberGuard (SOC Lead)',
+        containmentActionTaken: 'Edge DNS block initiated',
+        threatScore: 85,
+        reportedAt: new Date(Date.now() - 7200000).toISOString()
+      },
+      {
+        id: 'INC-2026-9041',
+        title: 'Suspicious Trojan Dropper Detected in Finance Payload',
+        target: '44d88612fea8a8f36de82e1278abb02f',
+        severity: 'high',
+        status: 'contained',
+        category: 'Malware',
+        mitreTactic: 'Execution',
+        mitreTechniqueId: 'T1204.002 (Malicious File)',
+        description: 'High-entropy PE executable detected with matching EICAR/AsyncRAT dropper signature.',
+        affectedAsset: 'Workstation WS-FIN-08',
+        assignedOfficer: 'Analyst Security-1',
+        containmentActionTaken: 'Host isolated from VLAN',
+        threatScore: 95,
+        reportedAt: new Date(Date.now() - 18000000).toISOString()
+      }
+    ];
+    setIncidentsList(staticIncidents);
+    if (!selectedIncident) setSelectedIncident(staticIncidents[0]);
   };
 
   useEffect(() => {
@@ -172,7 +223,7 @@ export default function Dashboard({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Handlers for Scanners
+  // Handlers for Scanners (Hybrid: Tries API backend first, seamlessly falls back to client engine for GitHub Pages)
   const executeEmailScan = async (targetEmail: string) => {
     if (!targetEmail || !targetEmail.includes('@')) {
       setError('Please provide a valid target email address.');
@@ -186,17 +237,25 @@ export default function Dashboard({
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ email: targetEmail })
       });
-      const data = await safeJsonResponse(res, 'Email breach assessment failed');
-      if (data?.scan) {
-        setCurrentScan(data.scan);
-        setScans(prev => [data.scan, ...prev]);
-        if (data.user) onUserUpdate(data.user);
+      if (res.ok) {
+        const data = await safeJsonResponse(res, 'Email breach assessment failed');
+        if (data?.scan) {
+          setCurrentScan(data.scan);
+          setScans(prev => [data.scan, ...prev]);
+          if (data.user) onUserUpdate(data.user);
+          return;
+        }
       }
-    } catch (err: any) {
-      setError(err.message || 'Email breach scan execution error.');
+    } catch {
+      // Backend not running or static GitHub Pages mode
     } finally {
       setLoading(false);
     }
+
+    // Deterministic Client-Side Fallback Engine
+    const clientData = clientLookupEmail(targetEmail);
+    setCurrentScan(clientData.scan);
+    setScans(prev => [clientData.scan, ...prev]);
   };
 
   const handleScanEmail = async (e: React.FormEvent) => {
@@ -217,17 +276,25 @@ export default function Dashboard({
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ url: targetUrl })
       });
-      const data = await safeJsonResponse(res, 'Link reputation inspection failed');
-      if (data?.scan) {
-        setCurrentScan(data.scan);
-        setScans(prev => [data.scan, ...prev]);
-        if (data.user) onUserUpdate(data.user);
+      if (res.ok) {
+        const data = await safeJsonResponse(res, 'Link reputation inspection failed');
+        if (data?.scan) {
+          setCurrentScan(data.scan);
+          setScans(prev => [data.scan, ...prev]);
+          if (data.user) onUserUpdate(data.user);
+          return;
+        }
       }
-    } catch (err: any) {
-      setError(err.message || 'URL threat inspection failed.');
+    } catch {
+      // Backend not running or static GitHub Pages mode
     } finally {
       setLoading(false);
     }
+
+    // Deterministic Client-Side Fallback Engine
+    const clientData = clientAnalyzeUrl(targetUrl);
+    setCurrentScan(clientData.scan);
+    setScans(prev => [clientData.scan, ...prev]);
   };
 
   const handleScanUrl = async (e: React.FormEvent) => {
@@ -297,17 +364,25 @@ export default function Dashboard({
           filename: imageFile.name
         })
       });
-      const data = await safeJsonResponse(res, 'Visual threat inspection failed');
-      if (data?.scan) {
-        setCurrentScan(data.scan);
-        setScans(prev => [data.scan, ...prev]);
-        if (data.user) onUserUpdate(data.user);
+      if (res.ok) {
+        const data = await safeJsonResponse(res, 'Visual threat inspection failed');
+        if (data?.scan) {
+          setCurrentScan(data.scan);
+          setScans(prev => [data.scan, ...prev]);
+          if (data.user) onUserUpdate(data.user);
+          return;
+        }
       }
-    } catch (err: any) {
-      setError(err.message || 'Visual payload inspection error.');
+    } catch {
+      // Backend not running or static GitHub Pages mode
     } finally {
       setLoading(false);
     }
+
+    // Deterministic Client-Side Fallback Engine
+    const clientData = clientAnalyzeImage(imageFile.name);
+    setCurrentScan(clientData.scan);
+    setScans(prev => [clientData.scan, ...prev]);
   };
 
   const executeCveSearch = async (query: string, severity: string = 'ALL') => {
@@ -316,16 +391,22 @@ export default function Dashboard({
       const res = await fetch(`/api/cve/search?query=${encodeURIComponent(query)}&severity=${severity}&limit=20`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await safeJsonResponse(res, 'CVE query failed');
-      if (data) {
-        setCveResults(data);
+      if (res.ok) {
+        const data = await safeJsonResponse(res, 'CVE query failed');
+        if (data && data.cves) {
+          setCveResults(data);
+          return;
+        }
       }
-    } catch (err: any) {
-      console.warn('CVE search error:', err);
-      setError(err.message || 'CVE vulnerability query failed.');
+    } catch {
+      // Fallback
     } finally {
       setCveLoading(false);
     }
+
+    // Client-side CVE search
+    const localCves = clientSearchCves(query, severity, 20);
+    setCveResults(localCves);
   };
 
   const handleCveSearch = async (e: React.FormEvent) => {
@@ -343,14 +424,22 @@ export default function Dashboard({
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ target })
       });
-      const data = await safeJsonResponse(res, 'OSINT inspection failed');
-      if (data) setOsintResult(data);
-    } catch (err: any) {
-      console.warn('OSINT lookup error:', err);
-      setError(err.message || 'OSINT lookup failed.');
+      if (res.ok) {
+        const data = await safeJsonResponse(res, 'OSINT inspection failed');
+        if (data && data.target) {
+          setOsintResult(data);
+          return;
+        }
+      }
+    } catch {
+      // Fallback
     } finally {
       setOsintLoading(false);
     }
+
+    // Client-side OSINT resolution
+    const localOsint = clientAnalyzeOsint(target);
+    setOsintResult(localOsint);
   };
 
   const handleOsintLookup = async (e: React.FormEvent) => {
@@ -368,14 +457,22 @@ export default function Dashboard({
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ hash, fileName: fileName || hashFileName })
       });
-      const data = await safeJsonResponse(res, 'Malware hash forensics failed');
-      if (data) setHashResult(data);
-    } catch (err: any) {
-      console.warn('Hash lookup error:', err);
-      setError(err.message || 'Malware hash forensics failed.');
+      if (res.ok) {
+        const data = await safeJsonResponse(res, 'Malware hash forensics failed');
+        if (data && data.hash) {
+          setHashResult(data);
+          return;
+        }
+      }
+    } catch {
+      // Fallback
     } finally {
       setHashLoading(false);
     }
+
+    // Client-side malware hash forensics
+    const localHash = clientAnalyzeHash(hash, fileName || hashFileName);
+    setHashResult(localHash);
   };
 
   const handleHashLookup = async (e: React.FormEvent) => {
@@ -396,17 +493,31 @@ export default function Dashboard({
           note: triageNote
         })
       });
-      const data = await safeJsonResponse(res, 'SIEM triage update failed');
-      if (data?.incident) {
-        setSelectedIncident(data.incident);
-        setIncidentsList(prev => prev.map(inc => inc.id === data.incident.id ? data.incident : inc));
-        setTriageNote('');
-        notifyCopy('Incident status updated');
+      if (res.ok) {
+        const data = await safeJsonResponse(res, 'SIEM triage update failed');
+        if (data?.incident) {
+          setSelectedIncident(data.incident);
+          setIncidentsList(prev => prev.map(inc => inc.id === data.incident.id ? data.incident : inc));
+          setTriageNote('');
+          notifyCopy('Incident status updated');
+          return;
+        }
       }
-    } catch (err: any) {
-      console.warn('SIEM triage error:', err);
-      setError(err.message || 'Failed to update SIEM incident.');
+    } catch {
+      // Fallback
     }
+
+    // Client-side triage update
+    const updatedInc = {
+      ...selectedIncident,
+      status: triageStatus,
+      containmentActionTaken: containmentActionInput || selectedIncident.containmentActionTaken,
+      triagedAt: new Date().toISOString()
+    };
+    setSelectedIncident(updatedInc);
+    setIncidentsList(prev => prev.map(inc => inc.id === updatedInc.id ? updatedInc : inc));
+    setTriageNote('');
+    notifyCopy('Incident status updated (Client)');
   };
 
   const handleStixExport = async (e?: React.FormEvent) => {
@@ -423,17 +534,24 @@ export default function Dashboard({
           notes: stixNotes || 'Forensic threat indicator extracted via CyberGuard Workstation'
         })
       });
-      const data = await safeJsonResponse(res, 'STIX 2.1 generation failed');
-      if (data?.stixBundle || data?.bundle) {
-        setStixBundleResult(data.stixBundle || data.bundle);
-        notifyCopy('STIX 2.1 JSON Generated');
+      if (res.ok) {
+        const data = await safeJsonResponse(res, 'STIX 2.1 generation failed');
+        if (data?.stixBundle || data?.bundle) {
+          setStixBundleResult(data.stixBundle || data.bundle);
+          notifyCopy('STIX 2.1 JSON Generated');
+          return;
+        }
       }
-    } catch (err: any) {
-      console.warn('STIX export error:', err);
-      setError(err.message || 'STIX 2.1 generation error.');
+    } catch {
+      // Fallback
     } finally {
       setStixLoading(false);
     }
+
+    // Client-side STIX 2.1 bundle generation
+    const localStix = clientGenerateStix(stixTarget || 'malicious-c2-node.org', 85);
+    setStixBundleResult(localStix.bundle);
+    notifyCopy('STIX 2.1 JSON Generated (Client)');
   };
 
   const handleDownloadStixJson = () => {

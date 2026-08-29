@@ -1,11 +1,15 @@
 # 🛡️ CyberGuard — Cyber Threat Intelligence & Breach Scanner
 
+[![Live Demo](https://img.shields.io/badge/LIVE_DEMO-GITHUB_PAGES-00E5FF?style=for-the-badge&logo=githubpages&logoColor=black)](https://kaushalhemant.github.io/cyberguard/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-6.2-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Express](https://img.shields.io/badge/Express-4.21-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-4.0-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+
+> 🌐 **Live Web Workstation**: [https://kaushalhemant.github.io/cyberguard/](https://kaushalhemant.github.io/cyberguard/)  
+> **100% Client-Side Ready**: Runs directly in any web browser with zero serverless dependency, instant deterministic threat scoring, and 1-click PDF briefing downloads.
 
 **CyberGuard** is an all-in-one **100% Deterministic, Rule-Based** Cyber Threat Intelligence, Data Breach Detection, and DFIR Workstation. Built specifically for compliance-critical environments (finance, healthcare, government, and enterprise SOCs), **CyberGuard uses zero AI/ML inference or black-box classifiers**. All risk scores, classifications, and detections are backed by transparent, mathematically auditable rules, cryptographic signatures, Shannon entropy analysis, homoglyph typosquatting tables, and authoritative threat intelligence feeds.
 
