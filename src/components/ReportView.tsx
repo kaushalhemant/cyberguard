@@ -1,7 +1,7 @@
 import React from 'react';
 import { Shield, Download, Printer, AlertTriangle, CheckSquare, ShieldCheck, ChevronLeft, FileText, Code } from 'lucide-react';
-import { jsPDF } from 'jspdf';
 import { ScanResult } from '../types';
+import { generateScanPdf } from '../lib/pdfGenerator';
 
 interface ReportViewProps {
   scan: ScanResult;
@@ -22,110 +22,7 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
   };
 
   const handleDownloadPdf = () => {
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
-
-    const primaryColor = [0, 229, 255]; // cyan
-    const darkSlate = [9, 13, 20];      // dark charcoal
-    const lightGray = [240, 243, 246];  // light gray
-    
-    // Header Background Accent bar
-    doc.setFillColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-    doc.rect(0, 0, 210, 40, 'F');
-
-    // Header Title
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text('CYBERGUARD FORENSIC BRIEFING', 15, 18);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(0, 200, 255);
-    doc.text('REAL-TIME THREAT EXPOSURE & DIAGNOSTICS REPORT', 15, 25);
-
-    doc.setFontSize(9);
-    doc.setTextColor(150, 150, 150);
-    doc.text(`Report ID: SEC-${scan.id.substring(0, 12).toUpperCase()}   |   Compiled: ${new Date(scan.timestamp).toLocaleString()}`, 15, 32);
-
-    let y = 50;
-
-    // Target Details Box
-    doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
-    doc.roundedRect(15, y, 180, 22, 2, 2, 'F');
-    
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-    const targetLabel = scan.scanType === 'link' ? 'TARGET LINK URL' : scan.scanType === 'image' ? 'TARGET SCREENSHOT FILE' : 'TARGET ENDPOINT EMAIL';
-    const targetVal = scan.scanType === 'link' ? scan.targetLink : scan.scanType === 'image' ? scan.imageFileName : scan.targetEmail;
-    doc.text(targetLabel, 20, y + 8);
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(0, 150, 200);
-    
-    const targetValClipped = targetVal && targetVal.length > 70 ? targetVal.substring(0, 70) + '...' : targetVal || '';
-    doc.text(targetValClipped, 20, y + 15);
-
-    y += 30;
-
-    // Threat Score & Level
-    doc.setFillColor(245, 247, 250);
-    doc.roundedRect(15, y, 180, 20, 2, 2, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-    doc.text('THREAT EXPOSURE SCORE:', 20, y + 12);
-    
-    doc.setFontSize(14);
-    const scoreText = `${scan.riskScore} / 100`;
-    doc.setTextColor(scan.riskScore >= 70 ? 220 : scan.riskScore >= 40 ? 217 : 16, scan.riskScore >= 70 ? 38 : scan.riskScore >= 40 ? 119 : 185, scan.riskScore >= 70 ? 38 : scan.riskScore >= 40 ? 6 : 129);
-    doc.text(scoreText, 80, y + 13);
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`[ ${risk.label} ]`, 125, y + 12);
-
-    y += 28;
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
-    doc.text('RECOMMENDED SECURITY COUNTERMEASURES', 15, y);
-    y += 6;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
-    doc.setTextColor(60, 60, 60);
-
-    const items = scan.scanType === 'link' ? [
-      'Do Not Authorize Session: Never enter MFA codes or master keys on this domain.',
-      'Inspect Host Domain: Manually confirm identical lettering in your browser bar.',
-      'Deploy Private Sandbox: Use insulated proxy nodes if accessing unknown TLD portals.'
-    ] : scan.scanType === 'image' ? [
-      'Independent QR Scanning: Avoid reading QR triggers embedded inside unknown captures.',
-      'Confirm Sender Authenticity: Verify urgent payments directly with billing vendors.',
-      'Ignore Fake Graphic Prompts: Disregard prompts mimicking OS system crash warnings.'
-    ] : [
-      'Enforce Unique Passwords: Use non-overlapping passwords managed inside safe vaults.',
-      'Setup Hardware MFA: Deploy physical or app authenticators on sensitive emails.',
-      'Isolate Secondary Sign-ups: Route transient platform registers to separate mock email addresses.'
-    ];
-
-    items.forEach((item, idx) => {
-      doc.text(`${idx + 1}. ${item}`, 15, y);
-      y += 6;
-    });
-
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text('This security threat assessment was generated securely by CyberGuard. Keep credentials private.', 15, 287);
-
-    doc.save(`CyberGuard_Security_Briefing_${scan.id.substring(0, 8).toUpperCase()}.pdf`);
+    generateScanPdf(scan);
   };
 
   // Helper for Bit-Density Risk Segment Meter

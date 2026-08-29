@@ -2,6 +2,14 @@ import path from 'path';
 import fs from 'fs';
 import express, { Request, Response } from 'express';
 import handler from './api/[...path]';
+import {
+  lookupEmailBreaches,
+  searchCves,
+  analyzeUrl,
+  analyzeHash,
+  analyzeOsint,
+  calculateShannonEntropy
+} from './src/server/threatEngine';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -16,30 +24,6 @@ app.all('/api/*', async (req: Request, res: Response) => {
 app.all('/api', async (req: Request, res: Response) => {
   await handler(req, res);
 });
-
-// Serve frontend SPA in production
-const distPath = path.resolve(process.cwd(), 'dist');
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
-  app.get('*', (req: Request, res: Response) => {
-    if (!req.url.startsWith('/api')) {
-      const indexPath = path.join(distPath, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        return res.sendFile(indexPath);
-      }
-    }
-    res.status(404).json({ error: 'Not Found' });
-  });
-}
-
-import {
-  lookupEmailBreaches,
-  searchCves,
-  analyzeUrl,
-  analyzeHash,
-  analyzeOsint,
-  calculateShannonEntropy
-} from './src/server/threatEngine';
 
 // Startup-time sanity check for deterministic engine and environment readiness
 function performStartupSanityCheck() {
@@ -60,12 +44,48 @@ function performStartupSanityCheck() {
   }
 }
 
-if (process.env.NODE_ENV !== 'test') {
+async function startServer() {
   performStartupSanityCheck();
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[CyberGuard] Core Threat Engine running on http://0.0.0.0:${PORT}`);
-    console.log(`[CyberGuard] Deterministic Rule-Based Architecture: 100% AUDITABLE`);
-  });
+
+  // In development, mount Vite dev middleware for live React 19 HMR
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa'
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.warn('[CyberGuard] Vite dev middleware skipped, falling back to static dist:', e);
+    }
+  }
+
+  // Serve compiled production SPA assets if available
+  const distPath = path.resolve(process.cwd(), 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (req: Request, res: Response) => {
+      if (!req.url.startsWith('/api')) {
+        const indexPath = path.join(distPath, 'index.html');
+        if (fs.existsSync(indexPath)) {
+          return res.sendFile(indexPath);
+        }
+      }
+      res.status(404).json({ error: 'Not Found' });
+    });
+  }
+
+  if (process.env.NODE_ENV !== 'test') {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[CyberGuard] Core Threat Engine & UI running on http://0.0.0.0:${PORT}`);
+      console.log(`[CyberGuard] Deterministic Rule-Based Architecture: 100% AUDITABLE`);
+    });
+  }
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
 }
 
 export default app;

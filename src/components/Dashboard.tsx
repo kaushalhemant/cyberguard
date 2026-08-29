@@ -11,6 +11,7 @@ import Terminal from './Terminal';
 import PrivacyStatementModal from './PrivacyStatementModal';
 import UsageAudit from './UsageAudit';
 import { safeJsonResponse } from '../lib/api';
+import { generateScanPdf } from '../lib/pdfGenerator';
 
 interface DashboardProps {
   user: User;
@@ -1224,20 +1225,65 @@ export default function Dashboard({
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between pt-2 border-t border-[#263147]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#263147]">
                     <span className="text-[10px] font-mono text-[#7E8B9B]">
                       TIMESTAMP: {new Date(currentScan.timestamp).toLocaleString()}
                     </span>
-                    <button
-                      onClick={() => onSelectReport(currentScan)}
-                      className="btn-soc px-3 py-1 text-[10px] flex items-center gap-1 text-[#00E5FF] border-[#00E5FF]/40 cursor-pointer"
-                    >
-                      <Eye className="w-3 h-3" />
-                      <span>FULL FORENSIC REPORT & PDF</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => generateScanPdf(currentScan)}
+                        className="btn-soc btn-soc-primary px-3 py-1 text-[10px] flex items-center gap-1 cursor-pointer"
+                        title="Instant Download PDF"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>DOWNLOAD PDF</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onSelectReport(currentScan)}
+                        className="btn-soc px-3 py-1 text-[10px] flex items-center gap-1 text-[#00E5FF] border-[#00E5FF]/40 cursor-pointer"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>FULL REPORT VIEW</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* EMPTY / INITIAL READY STATE FOR CENTER COLUMN */}
+          {['email', 'link', 'image'].includes(activeTab) && !currentScan && (
+            <div className="soc-panel p-6 space-y-4 text-center">
+              <div className="w-12 h-12 bg-[#181F2E] border border-[#263147] rounded-sm flex items-center justify-center text-[#00E5FF] mx-auto">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold font-display uppercase tracking-wider text-white">
+                  Deterministic Threat Radar Ready
+                </h3>
+                <p className="text-xs font-mono text-[#7E8B9B] max-w-md mx-auto mt-1 leading-relaxed">
+                  Select a threat vector on the left panel or click any 1-click sample preset to execute an audit and view real-time score attribution.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => executeEmailScan('compromised_user@adobe.com')}
+                  className="btn-soc px-3 py-1.5 text-xs text-[#FF334B] border-[#FF334B]/40 hover:bg-[#FF334B]/10 cursor-pointer font-mono"
+                >
+                  🚨 Run Sample Breach Audit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => executeUrlScan('https://paypa1-secure-login.xyz/verify')}
+                  className="btn-soc px-3 py-1.5 text-xs text-[#00E5FF] border-[#00E5FF]/40 hover:bg-[#00E5FF]/10 cursor-pointer font-mono"
+                >
+                  🔗 Run Sample Phishing URL Audit
+                </button>
+              </div>
             </div>
           )}
 
