@@ -182,6 +182,7 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({
         status: 'ok',
         server: 'CyberGuard Unified Serverless Hub',
+        deterministicEngine: true,
         timestamp: new Date().toISOString(),
         resolvedRoute: `/api/${route}`
       });

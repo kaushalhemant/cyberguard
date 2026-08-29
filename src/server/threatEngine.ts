@@ -518,7 +518,9 @@ export async function searchCves(query: string, severity = 'ALL', limit = 20): P
           if (severity && severity.toUpperCase() !== 'ALL') {
             filtered = filtered.filter(c => c.severity === severity.toUpperCase());
           }
-          return { totalMatches: filtered.length, cves: filtered.slice(0, limit) };
+          if (filtered.length > 0) {
+            return { totalMatches: filtered.length, cves: filtered.slice(0, limit) };
+          }
         }
       }
     } catch {}
