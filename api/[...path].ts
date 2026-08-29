@@ -86,6 +86,7 @@ let memoryIncidents = [
 
 /**
  * Robust request body parser that handles parsed objects, JSON strings, Buffers, and stream buffering.
+ * Guarantees zero indefinite stream hanging in serverless (AWS Lambda / Vercel) environments.
  */
 async function parseRequestBody(req: any): Promise<any> {
   if (req.body !== undefined && req.body !== null) {
@@ -108,14 +109,21 @@ async function parseRequestBody(req: any): Promise<any> {
     }
   }
 
-  // If body is a stream (e.g. raw Node HTTP request)
-  if (typeof req.on === 'function') {
-    return new Promise((resolve) => {
+  // If already consumed or not readable, return empty object immediately
+  if (req.readableEnded || req.readable === false || typeof req.on !== 'function') {
+    return {};
+  }
+
+  // Fallback stream buffering with strict 200ms timeout to prevent lambda freeze
+  try {
+    return await new Promise((resolve) => {
       let data = '';
+      const timer = setTimeout(() => resolve({}), 200);
       req.on('data', (chunk: any) => {
         data += chunk;
       });
       req.on('end', () => {
+        clearTimeout(timer);
         try {
           resolve(data ? JSON.parse(data) : {});
         } catch {
@@ -123,12 +131,13 @@ async function parseRequestBody(req: any): Promise<any> {
         }
       });
       req.on('error', () => {
+        clearTimeout(timer);
         resolve({});
       });
     });
+  } catch {
+    return {};
   }
-
-  return {};
 }
 
 /**
@@ -157,24 +166,23 @@ function resolveRoutePath(req: any): { route: string; segments: string[] } {
 }
 
 export default async function handler(req: any, res: any) {
-  // 1. CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  // 2. Resolve Route & Log Request for Vercel Runtime Logs
-  const { route, segments } = resolveRoutePath(req);
-  const method = (req.method || 'GET').toUpperCase();
-
-  console.log(`[CyberGuard API] ${method} URL="${req.url}" QueryPath=${JSON.stringify(req.query?.path)} -> ResolvedRoute="/api/${route}"`);
-
-  // 3. Parse Request Body
-  const body = await parseRequestBody(req);
-
   try {
+    // 1. CORS Headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+
+    // 2. Resolve Route & Log Request for Vercel Runtime Logs
+    const { route, segments } = resolveRoutePath(req);
+    const method = (req.method || 'GET').toUpperCase();
+
+    console.log(`[CyberGuard API] ${method} URL="${req.url}" QueryPath=${JSON.stringify(req.query?.path)} -> ResolvedRoute="/api/${route}"`);
+
+    // 3. Parse Request Body safely
+    const body = await parseRequestBody(req);
     // -----------------------------------------------------------------
     // ROUTE 1: Healthcheck -> /api/health or /api
     // -----------------------------------------------------------------
