@@ -32,11 +32,19 @@ if (fs.existsSync(distPath)) {
   });
 }
 
+import {
+  lookupEmailBreaches,
+  searchCves,
+  analyzeUrl,
+  analyzeHash,
+  analyzeOsint,
+  calculateShannonEntropy
+} from './src/server/threatEngine';
+
 // Startup-time sanity check for deterministic engine and environment readiness
 function performStartupSanityCheck() {
   console.log('[CyberGuard] Performing deterministic engine sanity checks...');
   try {
-    const { lookupEmailBreaches, searchCves, analyzeUrl, analyzeHash, analyzeOsint, calculateShannonEntropy } = require('./src/server/threatEngine');
     if (!lookupEmailBreaches || !searchCves || !analyzeUrl || !analyzeHash || !analyzeOsint || !calculateShannonEntropy) {
       throw new Error('Core deterministic threat engine exports are missing or incomplete.');
     }
