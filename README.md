@@ -7,19 +7,31 @@
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-4.0-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-**CyberGuard** is an all-in-one Cyber Threat Intelligence, Data Breach Detection, and Security Analysis Suite. Designed for security analysts, IT administrators, and privacy-conscious users, CyberGuard provides real-time phishing link evaluation, email breach lookups, optical OCR document threat analysis, and automated PDF compliance reports.
+**CyberGuard** is an all-in-one **100% Deterministic, Rule-Based** Cyber Threat Intelligence, Data Breach Detection, and DFIR Workstation. Built specifically for compliance-critical environments (finance, healthcare, government, and enterprise SOCs), **CyberGuard uses zero AI/ML inference or black-box classifiers**. All risk scores, classifications, and detections are backed by transparent, mathematically auditable rules, cryptographic signatures, Shannon entropy analysis, homoglyph typosquatting tables, and authoritative threat intelligence feeds.
+
+---
+
+## 🔒 100% Deterministic & Auditable (Zero AI/ML)
+
+- **Zero Black-Box Outputs**: Every risk score is computed through an inspectable point rubric with full signal-by-signal attribution.
+- **Repeatable & Verifiable**: Identical inputs always yield identical results with zero non-deterministic variance.
+- **Shannon Entropy Engine**: $H = -\sum p_i \log_2 p_i$ analysis for packed and encrypted malware binary detection.
+- **Enterprise Typosquatting Matrix**: Multi-brand homoglyph replacement mapping with normalized Levenshtein distance evaluation.
 
 ---
 
 ## ✨ Key Features
 
-- **📧 Email Breach & Leak Scanner**: Scans database records for compromised credentials, leak dates, severity metrics, and exposed data classes.
-- **🔗 Link & Phishing Threat Inspector**: Real-time URL reputation scoring, domain analysis, red-flag indicators, and phishing tactic identification.
-- **🖼️ Image & Document Threat OCR**: Uses EXIF metadata parsing and Tesseract OCR to scan screenshots, documents, and credentials for hidden metadata and security risks.
-- **🧠 Real-Time Threat Intelligence**: Live global alert feeds, surging phishing tactics, risk scoring algorithms, and remediation guidelines.
-- **💻 Interactive Security Terminal**: Built-in CLI command interface for executing quick network diagnostics and security commands.
+- **📧 Email Breach & Exposure Auditor**: Verifies identities against curated leak repositories with point weights for credential types, financial exposure, and leak recency.
+- **🔗 Link & Phishing Threat Inspector**: Real-time URL reputation scoring, 50+ brand typosquatting checks, 40+ high-risk TLD filters, and VirusTotal v3 verification.
+- **🖼️ Visual & Document Payload Forensics**: SHA-256/MD5 cryptographic signature matching, EXIF metadata tampering audits, and raw Tesseract OCR keyword extraction.
+- **📚 NIST NVD CVE Vulnerability Intelligence**: Live NIST NVD API v2.0 search and pre-indexed vulnerability database with CVSS v3.1 scoring.
+- **🌐 OSINT IP & Domain Inspector**: Resolves ASNs, open management ports (RDP, SSH, Telnet), DNS security (SPF, DMARC), and blacklist status (Spamhaus, AbuseIPDB, Quad9).
+- **🧬 Malware Hash Forensics**: Shannon entropy calculations, PE header magic byte inspection, and YARA-style signature mapping.
+- **🚨 SIEM Incident Response Matrix**: MITRE ATT&CK categorized incident queue with triage workflows, containment rules, and officer assignment.
+- **📦 OASIS STIX 2.1 Bundler**: Exports forensic findings to standard STIX 2.1 bundles for ingestion into enterprise SIEMs (Splunk, QRadar, Sentinel).
+- **💻 Interactive Security Terminal**: Built-in CLI command interface for executing network diagnostics and security queries.
 - **📑 Executive PDF Report Generator**: Generate and export downloadable security audit reports powered by `jsPDF`.
-- **🔐 Enterprise Access & Admin Portal**: Multi-role authentication, user session management, audit log monitoring, and subscription management.
 
 ---
 

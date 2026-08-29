@@ -12,7 +12,7 @@ export interface User {
 
 export interface Breach {
   id: string;
-  targetEmail: string;
+  targetEmail?: string;
   Title: string;
   Domain: string;
   BreachDate: string;
@@ -31,7 +31,9 @@ export interface ScanResult {
   resultCount: number;
   breaches: Breach[];
   riskScore: number;
-  aiSummary?: string;
+  forensicSummary?: string;
+  aiSummary?: string; // Legacy compatibility alias
+  scoreBreakdown?: { rule: string; points: number }[];
   scanType?: 'email' | 'link' | 'image';
   targetLink?: string;
   targetImage?: string;

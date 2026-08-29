@@ -15,7 +15,10 @@ const BRAND_TARGETS = [
   'google', 'paypal', 'microsoft', 'apple', 'amazon',
   'netflix', 'facebook', 'instagram', 'linkedin', 'chase',
   'wellsfargo', 'binance', 'coinbase', 'razorpay', 'cyberguard',
-  'twitter', 'github', 'dropbox', 'adobe', 'stripe'
+  'twitter', 'github', 'dropbox', 'adobe', 'stripe', 'okta',
+  'slack', 'zoom', 'cloudflare', 'salesforce', 'docusign',
+  'cisco', 'crowdstrike', 'bankofamerica', 'citibank', 'fidelity',
+  'schwab', 'usps', 'fedex', 'dhl', 'ups', 'walmart', 'ebay'
 ];
 
 /**
@@ -24,8 +27,10 @@ const BRAND_TARGETS = [
  */
 const SUSPICIOUS_TLDS = [
   'xyz', 'top', 'zip', 'click', 'kim', 'download', 'work',
-  'gq', 'cf', 'ml', 'tk', 'icu', 'monster', 'link', 'country',
-  'stream', 'study', 'party', 'trade', 'racing', 'bid', 'asia'
+  'gq', 'cf', 'ml', 'tk', 'icu', 'monster', 'stream', 'party',
+  'link', 'country', 'study', 'trade', 'racing', 'bid', 'asia',
+  'buzz', 'club', 'fit', 'gdn', 'loan', 'mom', 'online', 'rest',
+  'review', 'space', 'surf', 'vip', 'website', 'win', 'zone'
 ];
 
 /**

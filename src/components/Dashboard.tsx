@@ -1197,7 +1197,7 @@ export default function Dashboard({
                 /* ANNOTATED FINDINGS VIEW */
                 <div className="space-y-3">
                   <div className="bg-[#090D14] border border-[#263147] p-3 text-xs leading-relaxed text-[#ECEFF4] font-mono whitespace-pre-wrap">
-                    {currentScan.aiSummary}
+                    {currentScan.forensicSummary || currentScan.aiSummary}
                   </div>
 
                   {currentScan.breaches && currentScan.breaches.length > 0 && (

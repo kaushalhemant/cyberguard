@@ -71,8 +71,9 @@ const initialDb: DbSchema = {
         targetEmail: 'official@cyberguard.gov',
         timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
         resultCount: 0,
-        riskScore: 5,
-        aiSummary: "### 🛡️ CyberGuard Initial Baseline Assessment\n\n**Target Identity**: `official@cyberguard.gov`  \n**Calculated Risk Index**: **5/100** (🟢 MINIMAL RISK)  \n**Total Breach Exposures**: **0 Incidents**\n\n#### 🟢 Zero Public Exposure Detected\nNo public or dark-web leak records found for this identity.",
+        riskScore: 0,
+        forensicSummary: "### 🛡️ CyberGuard Deterministic Baseline Assessment\n\n**Target Identity**: `official@cyberguard.gov`  \n**Calculated Risk Index**: **0/100** (🟢 VERIFIED CLEAN)  \n**Total Breach Exposures**: **0 Incidents**\n\n#### 🟢 Zero Public Exposure Detected\nNo public or dark-web leak records found for this identity.",
+        aiSummary: "### 🛡️ CyberGuard Deterministic Baseline Assessment\n\n**Target Identity**: `official@cyberguard.gov`  \n**Calculated Risk Index**: **0/100** (🟢 VERIFIED CLEAN)  \n**Total Breach Exposures**: **0 Incidents**\n\n#### 🟢 Zero Public Exposure Detected\nNo public or dark-web leak records found for this identity.",
         breaches: []
       }
     ],
@@ -83,6 +84,7 @@ const initialDb: DbSchema = {
         timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
         resultCount: 2,
         riskScore: 68,
+        forensicSummary: "Your email user@cyberguard.com was leaked in the Canva and Adobe breaches. Canva leaked passwords and visual assets, whereas Adobe leaked passwords and hints. Immediate password rotation is highly advised.",
         aiSummary: "Your email user@cyberguard.com was leaked in the Canva and Adobe breaches. Canva leaked passwords and visual assets, whereas Adobe leaked passwords and hints. Immediate password rotation is highly advised.",
         breaches: [
           {
@@ -376,7 +378,7 @@ class HybridDb {
         timestamp: scan.timestamp,
         result_count: scan.resultCount,
         risk_score: scan.riskScore,
-        ai_summary: scan.aiSummary,
+        ai_summary: scan.forensicSummary || scan.aiSummary,
         breaches: scan.breaches || [],
         scan_type: scan.scanType || 'email',
         target_link: scan.targetLink || null,

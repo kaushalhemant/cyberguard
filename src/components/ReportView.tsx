@@ -239,7 +239,7 @@ export default function ReportView({ scan, onBack }: ReportViewProps) {
               <span>Executive Forensic Summary</span>
             </div>
             <div className="text-xs text-[#ECEFF4] leading-relaxed font-mono whitespace-pre-wrap">
-              {scan.aiSummary || 'Forensic analysis completed.'}
+              {scan.forensicSummary || scan.aiSummary || 'Forensic analysis completed.'}
             </div>
           </div>
         </div>

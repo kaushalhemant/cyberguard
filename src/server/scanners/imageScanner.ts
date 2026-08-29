@@ -5,6 +5,15 @@ import exifr from 'exifr';
 import { ScanRiskReport, TriggeredFlag, RiskLevel } from '../../types/scanners';
 
 /**
+ * CYBERGUARD DETERMINISTIC IMAGE & OCR FORENSIC SCANNER
+ * 100% Rule-Based, Zero AI/ML Inference.
+ * Tesseract OCR is strictly utilized as a raw character optical extraction layer.
+ * Extracted strings are evaluated exclusively through explicit regex patterns,
+ * cryptographic signature matching (SHA-256/MD5), and EXIF metadata heuristics.
+ * Zero learned classification, embeddings, or ML scoring layers are applied.
+ */
+
+/**
  * OCR PHISHING & DECEPTIVE TEXT KEYWORDS
  * Scans extracted OCR text for embedded credential harvesting prompts and financial lures.
  */

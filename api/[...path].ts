@@ -1,12 +1,14 @@
 import crypto from 'crypto';
 import {
   VERIFIED_BREACH_DB,
+  lookupEmailBreaches,
   searchCves,
   analyzeUrl,
   analyzeHash,
   analyzeOsint,
   PREINDEXED_CVES
 } from '../src/server/threatEngine';
+import { generateBreachReportSummary } from '../src/server/forensicReportEngine';
 
 const MASTER_USER = {
   id: 'usr_soc_official_master',
@@ -27,7 +29,8 @@ let memoryScans: any[] = [
     resultCount: 0,
     breaches: [],
     riskScore: 0,
-    aiSummary: '### 🛡️ Baseline Clean Audit\n\nIdentity audited with zero detected credential leaks.'
+    forensicSummary: '### 🛡️ Deterministic Baseline Clean Audit\n\nIdentity audited with zero detected credential leaks.',
+    aiSummary: '### 🛡️ Deterministic Baseline Clean Audit\n\nIdentity audited with zero detected credential leaks.'
   }
 ];
 
@@ -208,33 +211,19 @@ export default async function handler(req: any, res: any) {
       }
 
       const cleanEmail = email.trim().toLowerCase();
-      const isClean = cleanEmail.includes('secure') || cleanEmail.includes('cyberguard.com') || cleanEmail.includes('safe');
-
-      let breaches: any[] = [];
-      if (!isClean) {
-        const hashVal = cleanEmail.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        const count = (hashVal % 3) + 1;
-        breaches = VERIFIED_BREACH_DB.slice(0, count).map((b, idx) => ({
-          ...b,
-          id: `b-${b.Domain.replace(/\./g, '-')}-${idx}-${Date.now()}`,
-          targetEmail: cleanEmail
-        }));
-      }
-
-      const riskScore = breaches.length === 0 ? 0 : Math.min(100, Math.max(30, breaches.length * 30));
-      const allDataClasses = Array.from(new Set(breaches.flatMap(b => b.DataClasses || [])));
-      const aiSummary = breaches.length === 0
-        ? `### 🛡️ CyberGuard Security Threat Assessment\n\n**Target Identity**: \`${cleanEmail}\`  \n**Calculated Risk Index**: **0/100** (🟢 SECURE - ZERO LEAKS DETECTED)  \n\n#### ✅ Good News\nOur threat intelligence engine cross-referenced your email address against billions of compromised credentials. **No active breaches or leaked credentials were found linked to this identity.**`
-        : `### 🛡️ CyberGuard Security Threat Assessment\n\n**Target Identity**: \`${cleanEmail}\`  \n**Calculated Risk Index**: **${riskScore}/100** (${riskScore >= 70 ? '🚨 CRITICAL RISK' : '🟡 ELEVATED EXPOSURE'})  \n**Total Breach Exposures**: **${breaches.length} Incident(s)**  \n\n#### 🚨 Vulnerability & Exposure Analysis\nAn analysis of leaked threat intelligence databases indicates your identity was involved in **${breaches.length} security breach(es)**.\n\n**Compromised Data Categories**:\n${allDataClasses.map(dc => `- 🔑 **${dc}**`).join('\n')}\n\n#### 📋 Exposed Incident Timeline:\n${breaches.map(b => `- **${b.Title}** (\`${b.Domain}\`) - Leaked on **${b.BreachDate}**`).join('\n')}\n\n#### ⚡ Critical Remediation Checklist:\n1. **Rotate Credentials Immediately**: Change passwords on all compromised platforms.\n2. **Deploy Enterprise Password Vault**: Use an encrypted password manager.\n3. **Enforce FIDO2 / TOTP MFA**: Replace SMS OTPs with authenticator apps.`;
+      const breachResult = lookupEmailBreaches(cleanEmail);
+      const forensicSummary = generateBreachReportSummary(cleanEmail, breachResult.breaches, breachResult.riskScore, breachResult.scoreBreakdown);
 
       const scanRecord = {
         id: crypto.randomUUID(),
         targetEmail: cleanEmail,
         timestamp: new Date().toISOString(),
-        resultCount: breaches.length,
-        breaches,
-        riskScore,
-        aiSummary
+        resultCount: breachResult.breaches.length,
+        breaches: breachResult.breaches,
+        riskScore: breachResult.riskScore,
+        forensicSummary,
+        aiSummary: forensicSummary, // Backward compatibility alias
+        scoreBreakdown: breachResult.scoreBreakdown
       };
 
       memoryScans.unshift(scanRecord);
@@ -263,10 +252,12 @@ export default async function handler(req: any, res: any) {
         resultCount: analysis.threats.length,
         breaches: [],
         riskScore: analysis.riskScore,
-        aiSummary: analysis.aiSummary,
+        forensicSummary: analysis.forensicSummary,
+        aiSummary: analysis.aiSummary, // Backward compatibility alias
         scanType: 'link',
         targetLink: url,
-        detectedThreats: analysis.detectedThreats
+        detectedThreats: analysis.detectedThreats,
+        scoreBreakdown: analysis.scoreBreakdown
       };
 
       memoryScans.unshift(scanRecord);
@@ -302,11 +293,21 @@ export default async function handler(req: any, res: any) {
         ? ['Visual lure pattern matches fraudulent invoice / wire transfer lure', 'Cryptographic SHA-256 registered in threat ledger', 'Obfuscated QR code payload header pattern']
         : ['Clean image payload baseline', 'No anomalous embedded scripts found'];
 
-      const aiSummary = `### 🖼️ Visual & File Payload Forensic Inspection\n\n` +
+      const scoreBreakdown = isMaliciousLure
+        ? [
+            { rule: 'Invoice Scam / Financial Wire Lure Heuristic', points: 40 },
+            { rule: 'Cryptographic Hash Evaluation', points: 20 },
+            { rule: 'Quishing / Obfuscated Payload Pattern', points: 15 }
+          ]
+        : [{ rule: 'Clean Image Payload Baseline', points: 15 }];
+
+      const forensicSummary = `### 🖼️ Visual & File Payload Forensic Inspection\n\n` +
         `**Inspected Asset**: \`${filename}\`  \n` +
         `**SHA-256 Hash**: \`${sha256}\`  \n` +
         `**MD5 Hash**: \`${md5}\`  \n` +
         `**Risk Rating**: **${score}/100** (${score >= 50 ? '🚨 HIGH RISK LURE' : '🟢 CLEAN PAYLOAD'})\n\n` +
+        `#### 📊 Transparent Scoring Rubric Breakdown:\n` +
+        scoreBreakdown.map(sb => `- \`${sb.rule}\`: **+${sb.points} pts**`).join('\n') + `\n\n` +
         `#### Identified Forensic Indicators:\n` +
         threats.map(t => `- 🛑 **${t}**`).join('\n');
 
@@ -317,10 +318,12 @@ export default async function handler(req: any, res: any) {
         resultCount: threats.length,
         breaches: [],
         riskScore: score,
-        aiSummary,
+        forensicSummary,
+        aiSummary: forensicSummary, // Backward compatibility alias
         scanType: 'image',
         targetImage: filename,
-        detectedThreats: threats
+        detectedThreats: threats,
+        scoreBreakdown
       };
 
       memoryScans.unshift(scanRecord);
