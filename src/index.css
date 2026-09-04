@@ -1,25 +1,35 @@
 @import "tailwindcss";
 
 :root {
-  --bg-base: #090D14;
-  --bg-panel: #111622;
-  --bg-surface: #181F2E;
-  --border-grid: #263147;
-  --text-primary: #ECEFF4;
-  --text-muted: #7E8B9B;
+  --bg-base: #06090F;
+  --bg-panel: #0D131F;
+  --bg-surface: #131B2A;
+  --bg-surface-hover: #1A2538;
+  --border-grid: #202D42;
+  --border-quantum: #00E5FF40;
+  --text-primary: #F0F4F8;
+  --text-muted: #8392A5;
   --accent-cyan: #00E5FF;
+  --accent-violet: #A855F7;
+  --accent-emerald: #10B981;
+  --accent-amber: #F59E0B;
 
   --status-critical: #FF334B;
   --status-high: #FF9900;
   --status-medium: #E0C000;
   --status-low: #00E676;
+  --status-quantum: #A855F7;
+
+  --glow-cyan: 0 0 20px rgba(0, 229, 255, 0.25);
+  --glow-violet: 0 0 25px rgba(168, 85, 247, 0.3);
 }
 
 .theme-midnight {
-  --bg-base: #06090F;
-  --bg-panel: #0E121B;
-  --bg-surface: #141A26;
-  --border-grid: #1E2838;
+  --bg-base: #030509;
+  --bg-panel: #080C14;
+  --bg-surface: #0E1420;
+  --bg-surface-hover: #141C2C;
+  --border-grid: #182232;
 }
 
 @theme {
@@ -37,14 +47,29 @@ body {
   background-color: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 229, 255, 0.06), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(168, 85, 247, 0.04), transparent);
 }
 
-/* High-Density SOC Panel Container (No Glassmorphism, No Drop Shadows) */
+/* 2030 SOC & Quantum Holographic Panel Container */
 .soc-panel {
   background-color: var(--bg-panel);
   border: 1px solid var(--border-grid);
-  border-radius: 0.25rem; /* micro 4px chamfer */
-  box-shadow: none;
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.soc-panel-quantum {
+  background-color: var(--bg-panel);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  box-shadow: 0 4px 25px rgba(168, 85, 247, 0.08);
+}
+
+.soc-panel:hover {
+  border-color: rgba(0, 229, 255, 0.35);
 }
 
 .soc-header {
@@ -66,7 +91,7 @@ body {
 /* Monospaced Technical Tags */
 .status-chip {
   padding: 2px 8px;
-  border-radius: 2px;
+  border-radius: 3px;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
@@ -78,60 +103,91 @@ body {
 }
 
 .status-chip-critical {
-  background: rgba(255, 51, 75, 0.12);
+  background: rgba(255, 51, 75, 0.15);
   color: #FF334B;
-  border: 1px solid rgba(255, 51, 75, 0.35);
+  border: 1px solid rgba(255, 51, 75, 0.4);
 }
 
 .status-chip-high {
-  background: rgba(255, 153, 0, 0.12);
+  background: rgba(255, 153, 0, 0.15);
   color: #FF9900;
-  border: 1px solid rgba(255, 153, 0, 0.35);
+  border: 1px solid rgba(255, 153, 0, 0.4);
 }
 
 .status-chip-medium {
-  background: rgba(224, 192, 0, 0.12);
+  background: rgba(224, 192, 0, 0.15);
   color: #E0C000;
-  border: 1px solid rgba(224, 192, 0, 0.35);
+  border: 1px solid rgba(224, 192, 0, 0.4);
 }
 
 .status-chip-low {
-  background: rgba(0, 230, 118, 0.12);
+  background: rgba(0, 230, 118, 0.15);
   color: #00E676;
-  border: 1px solid rgba(0, 230, 118, 0.35);
+  border: 1px solid rgba(0, 230, 118, 0.4);
+}
+
+.status-chip-quantum {
+  background: rgba(168, 85, 247, 0.15);
+  color: #C084FC;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
+}
+
+.status-chip-cyan {
+  background: rgba(0, 229, 255, 0.12);
+  color: #00E5FF;
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
 }
 
 /* Tactical Action Buttons */
 .btn-soc {
-  background-color: #161E2E;
+  background-color: #121A28;
   color: var(--text-primary);
   border: 1px solid var(--border-grid);
-  border-radius: 2px;
+  border-radius: 3px;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .btn-soc:hover {
-  background-color: #1E283C;
+  background-color: #1A2538;
   border-color: var(--accent-cyan);
   color: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.15);
 }
 
 .btn-soc-primary {
-  background-color: #00E5FF;
-  color: #090D14;
+  background: linear-gradient(135deg, #00E5FF 0%, #00B4D8 100%);
+  color: #06090F;
   border: 1px solid #00E5FF;
   font-weight: 700;
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.25);
 }
 
 .btn-soc-primary:hover {
-  background-color: #33EBFF;
+  background: linear-gradient(135deg, #33EBFF 0%, #00C7EC 100%);
   border-color: #33EBFF;
-  color: #090D14;
+  color: #06090F;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
+}
+
+.btn-soc-quantum {
+  background: linear-gradient(135deg, #9333EA 0%, #7E22CE 100%);
+  color: #FFFFFF;
+  border: 1px solid #A855F7;
+  font-weight: 700;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+}
+
+.btn-soc-quantum:hover {
+  background: linear-gradient(135deg, #A855F7 0%, #9333EA 100%);
+  border-color: #C084FC;
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.5);
 }
 
 /* High-Contrast Inputs */
@@ -142,7 +198,15 @@ input, textarea, select {
 input:focus, textarea:focus, select:focus, button:focus {
   outline: none;
   border-color: var(--accent-cyan) !important;
-  box-shadow: 0 0 0 1px var(--accent-cyan) !important;
+  box-shadow: 0 0 0 1px var(--accent-cyan), 0 0 12px rgba(0, 229, 255, 0.25) !important;
+}
+
+/* 2030 Holographic Lattice Gridlines */
+.quantum-grid-bg {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, rgba(32, 45, 66, 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(32, 45, 66, 0.4) 1px, transparent 1px);
 }
 
 /* Dark Dense Scrollbars */
@@ -157,9 +221,19 @@ input:focus, textarea:focus, select:focus, button:focus {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border-grid);
-  border-radius: 2px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3A4760;
+  background: #3B4E6B;
 }
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s infinite ease-in-out;
+}
+

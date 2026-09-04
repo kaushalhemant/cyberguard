@@ -6,7 +6,13 @@ import {
   analyzeUrl,
   analyzeHash,
   analyzeOsint,
-  PREINDEXED_CVES
+  PREINDEXED_CVES,
+  analyzePqcReadiness,
+  simulateQuantumCryptanalysis,
+  analyzeDeepfakeMedia,
+  getAutonomousAiSwarmState,
+  executeSwarmPlaybook,
+  getLeoSatelliteMeshTelemetry
 } from '../src/server/threatEngine';
 import { generateBreachReportSummary } from '../src/server/forensicReportEngine';
 
@@ -166,6 +172,7 @@ function resolveRoutePath(req: any): { route: string; segments: string[] } {
 }
 
 export default async function handler(req: any, res: any) {
+  let route = '';
   try {
     // 1. CORS Headers
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -176,7 +183,9 @@ export default async function handler(req: any, res: any) {
     }
 
     // 2. Resolve Route & Log Request for Vercel Runtime Logs
-    const { route, segments } = resolveRoutePath(req);
+    const resolved = resolveRoutePath(req);
+    route = resolved.route;
+    const segments = resolved.segments;
     const method = (req.method || 'GET').toUpperCase();
 
     console.log(`[CyberGuard API] ${method} URL="${req.url}" QueryPath=${JSON.stringify(req.query?.path)} -> ResolvedRoute="/api/${route}"`);
@@ -490,6 +499,115 @@ export default async function handler(req: any, res: any) {
     }
 
     // -----------------------------------------------------------------
+    // ROUTE 15: Post-Quantum Cryptography (PQC) Audit -> /api/pqc/audit
+    // -----------------------------------------------------------------
+    if (route === 'pqc/audit' || route === 'pqc') {
+      const target = body.target || body.domain || body.url || 'quantum-defense.gov';
+      const pqcResult = analyzePqcReadiness(target);
+      return res.status(200).json(pqcResult);
+    }
+
+    // -----------------------------------------------------------------
+    // ROUTE 16: Quantum Shor Cryptanalysis Simulator -> /api/quantum/simulate
+    // -----------------------------------------------------------------
+    if (route === 'quantum/simulate' || route === 'quantum') {
+      const cipher = body.cipher || 'RSA';
+      const keySize = parseInt(body.keySize || '2048', 10);
+      const simResult = simulateQuantumCryptanalysis(cipher, keySize);
+      return res.status(200).json(simResult);
+    }
+
+    // -----------------------------------------------------------------
+    // ROUTE 17: Neural Deepfake & Synthetic Media Forensics -> /api/deepfake/scan
+    // -----------------------------------------------------------------
+    if (route === 'deepfake/scan' || route === 'deepfake') {
+      const targetName = body.targetName || body.filename || body.mediaName || 'generative_executive_portrait.png';
+      const mediaType = body.mediaType || (targetName.endsWith('.mp3') || targetName.endsWith('.wav') ? 'audio' : 'image');
+      const deepfakeResult = analyzeDeepfakeMedia(targetName, mediaType, body.payload);
+      return res.status(200).json(deepfakeResult);
+    }
+
+    // -----------------------------------------------------------------
+    // ROUTE 18: Autonomous Multi-Agent AI Swarm Telemetry -> /api/ai-swarm/telemetry
+    // -----------------------------------------------------------------
+    if (route === 'ai-swarm/telemetry' || route === 'ai-swarm') {
+      const swarmState = getAutonomousAiSwarmState();
+      return res.status(200).json(swarmState);
+    }
+
+    // -----------------------------------------------------------------
+    // ROUTE 19: Dispatch Autonomous Swarm Playbook -> /api/ai-swarm/action
+    // -----------------------------------------------------------------
+    if (route === 'ai-swarm/action') {
+      const { agentId, playbook, target } = body;
+      const actionEvent = executeSwarmPlaybook(agentId || 'agent_sentinel_alpha', playbook, target);
+      return res.status(200).json({ success: true, event: actionEvent });
+    }
+
+    // -----------------------------------------------------------------
+    // ROUTE 20: LEO Satellite Mesh & QKD Telemetry -> /api/satellite/mesh
+    // -----------------------------------------------------------------
+    if (route === 'satellite/mesh' || route === 'satellite') {
+      const meshTelemetry = getLeoSatelliteMeshTelemetry();
+      return res.status(200).json(meshTelemetry);
+    }
+
+    // -----------------------------------------------------------------
+    // ROUTE 21: STIX 3.0 / Quantum DFIR Bundle Export -> /api/stix3/export
+    // -----------------------------------------------------------------
+    if (route === 'stix3/export' || route === 'stix3') {
+      const { target, threatScore, findings } = body;
+      const indicatorId = 'indicator--' + crypto.randomUUID();
+      const sightingId = 'sighting--' + crypto.randomUUID();
+      const bundleId = 'bundle--' + crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      const stix3Bundle = {
+        type: 'bundle',
+        id: bundleId,
+        spec_version: '3.0',
+        quantum_threat_layer: {
+          nist_fips_standard: 'FIPS 203 / ML-KEM-768',
+          hndl_risk_rating: threatScore > 70 ? 'CRITICAL' : 'MODERATE',
+          zero_trust_status: 'HARDWARE_ENCLAVE_ATTESTED'
+        },
+        objects: [
+          {
+            type: 'indicator',
+            spec_version: '3.0',
+            id: indicatorId,
+            created: now,
+            modified: now,
+            name: `2030 Quantum Threat Indicator: ${target || 'quantum-defense-mesh.net'}`,
+            description: `Autonomous 2030 telemetry recorded by CyberGuard Quantum Swarm Engine. Threat Score: ${threatScore || 85}/100.`,
+            indicator_types: ['quantum-adversary-recon', 'synthetic-identity-probe'],
+            pattern: `[domain-name:value = '${target || 'quantum-defense-mesh.net'}']`,
+            pattern_type: 'stix',
+            valid_from: now,
+            confidence: threatScore || 85,
+            mitre_atlas_vector: 'AML.T0043 (Generative Synthetic Impersonation)'
+          },
+          {
+            type: 'sighting',
+            spec_version: '3.0',
+            id: sightingId,
+            created: now,
+            modified: now,
+            sighting_of_ref: indicatorId,
+            summary: `Autonomous multi-agent consensus achieved. Findings: ${(findings || ['PQC Hybrid Bypass Attempt', 'Spectral FFT Anomaly']).join('; ')}`
+          }
+        ]
+      };
+
+      return res.status(200).json({
+        success: true,
+        stix3Bundle,
+        bundle: stix3Bundle,
+        jsonString: JSON.stringify(stix3Bundle, null, 2)
+      });
+    }
+
+    // -----------------------------------------------------------------
     // 404 UNMATCHED ROUTE WITH EXPLICIT JSON ERROR
     // -----------------------------------------------------------------
     return res.status(404).json({
@@ -500,6 +618,13 @@ export default async function handler(req: any, res: any) {
         'POST /api/scan',
         'POST /api/scan-link',
         'POST /api/scan-image',
+        'POST /api/pqc/audit',
+        'POST /api/quantum/simulate',
+        'POST /api/deepfake/scan',
+        'GET  /api/ai-swarm/telemetry',
+        'POST /api/ai-swarm/action',
+        'GET  /api/satellite/mesh',
+        'POST /api/stix3/export',
         'GET  /api/cve/search',
         'GET  /api/cve/latest',
         'POST /api/soc/osint-lookup',

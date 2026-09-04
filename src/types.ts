@@ -128,12 +128,13 @@ export interface OsintResult {
   };
   threatCategories: string[];
   investigatorNotes?: string;
+  scoreBreakdown?: { rule: string; points: number }[];
   timestamp: string;
 }
 
 export interface HashAnalysisResult {
   hash: string;
-  hashType: 'MD5' | 'SHA1' | 'SHA256' | 'UNKNOWN';
+  hashType: 'MD5' | 'SHA1' | 'SHA256' | 'SHA-1' | 'SHA-256' | 'UNKNOWN';
   fileName?: string;
   fileSizeBytes?: number;
   detectedFormat: string;
@@ -145,6 +146,7 @@ export interface HashAnalysisResult {
   matchedYaraRules: string[];
   threatIndicators: string[];
   recommendation: string;
+  scoreBreakdown?: { rule: string; points: number }[];
   timestamp: string;
 }
 
@@ -176,5 +178,110 @@ export interface CveRecord {
   score: number;
   vectorString?: string;
 }
+
+// =====================================================================
+// 2030 NEXT-GEN CYBERSECURITY & DEFENSE TYPES
+// =====================================================================
+
+export interface PqcCipherAudit {
+  name: string;
+  algorithmType: 'KEM' | 'Signature' | 'Hybrid' | 'Classical';
+  nistStandard: 'FIPS 203 (ML-KEM)' | 'FIPS 204 (ML-DSA)' | 'FIPS 205 (SLH-DSA)' | 'Non-Compliant Classical (RSA/ECC)' | 'Draft PQC';
+  securityLevel: 1 | 3 | 5 | 0; // NIST Security Levels 1-5 (0 = broken by Shor's algorithm)
+  quantumResistant: boolean;
+  keySizeBits: number;
+  shorVulnerability: 'Critical (Broken in <10s)' | 'High' | 'Immune (Lattice Hardness)' | 'Immune (Hash Hardness)';
+}
+
+export interface PqcAnalysisResult {
+  target: string;
+  quantumReadinessScore: number; // 0 (Legacy/Compromised) to 100 (Full PQC Mesh)
+  complianceStatus: 'Fully PQC Compliant (2030 Standards)' | 'Hybrid PQC Transit' | 'Critical Q-Day Exposure';
+  hndlRisk: 'Severe (Data Vulnerable to Harvest-Now-Decrypt-Later)' | 'Moderate' | 'Protected';
+  detectedCipherSuite: string;
+  kemAlgorithm: string;
+  signatureAlgorithm: string;
+  ciphers: PqcCipherAudit[];
+  quantumMigrationRoadmap: string[];
+  qkdCompatibility: boolean;
+  scoreBreakdown: { rule: string; points: number; status: 'pass' | 'fail' | 'warn' }[];
+  timestamp: string;
+}
+
+export interface QuantumSimResult {
+  cipher: string;
+  keySize: number;
+  estimatedLogicalQubits: number;
+  shorExecutionSeconds: number;
+  classicalCrackingYears: string;
+  latticeHardnessDimension: number;
+  quantumResistanceScore: number; // 0 to 100
+  securityAssessment: string;
+  recommendedPqcAlternative: string;
+}
+
+export interface AiAgent {
+  id: string;
+  name: string;
+  codename: string;
+  role: 'Zero-Day Interception' | 'Quantum Lattice Audit' | 'Adversarial AI & Deepfake Hunter' | 'Autonomous Counter-Payload';
+  status: 'ACTIVE' | 'NEUTRALIZING' | 'PATROLLING' | 'CONSENSUS_VOTING';
+  confidenceScore: number;
+  threatsNeutralized: number;
+  activePlaybook: string;
+  latencyMs: number;
+}
+
+export interface AiSwarmEvent {
+  id: string;
+  timestamp: string;
+  agentCodename: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  eventType: 'ZERO_DAY_PREEMPTION' | 'LATTICE_INTEGRITY_CHECK' | 'DEEPFAKE_NEUTRALIZATION' | 'MICRO_ISOLATION' | 'ADVERSARIAL_LLM_PROBE';
+  target: string;
+  autonomousAction: string;
+  consensusScore: number;
+  details: string;
+}
+
+export interface DeepfakeForensicsResult {
+  targetName: string;
+  mediaType: 'image' | 'audio' | 'video' | 'synthetic_identity';
+  syntheticConfidence: number; // 0 (100% Authentic) to 100 (100% Generative Synthetic)
+  classification: 'AUTHENTIC_ORIGINAL' | 'SUSPICIOUS_HYBRID' | 'SYNTHETIC_DEEPFAKE' | 'VOICE_CLONE_INJECTION';
+  spectralAnomalyScore: number; // FFT frequency phase distortion
+  rppgPulseDetected: boolean; // Remote Photoplethysmography micro-blood flow
+  rppgConfidence: number;
+  voiceJitterVariance?: number;
+  detectedGenerativeArchetype: string; // e.g., 'Diffusion Latent Warp v8', 'Neural Voice Formant Synth'
+  redFlags: string[];
+  forensicEvidence: { metric: string; measured: string; baseline: string; status: 'clean' | 'anomaly' }[];
+  mitreAtlasTechnique: string;
+  timestamp: string;
+}
+
+export interface LeoSatelliteNode {
+  id: string;
+  name: string;
+  constellation: 'STARLINK-GEN3' | 'KUIPER-MESH' | 'ONEWEB-DEFENSE' | 'QUANTUM-RELAY-1';
+  altitudeKm: number;
+  orbitInclination: string;
+  qkdStatus: 'ACTIVE_ENTANGLED' | 'SYNCING' | 'RE-KEYING';
+  photonRateQps: number; // Quantum Photons per second
+  linkLatencyMs: number;
+  securityState: 'SECURE_MESH' | 'ANOMALOUS_JAMMING' | 'PQC_ENCLAVE_LOCKED';
+  activeGroundStation: string;
+}
+
+export interface SatelliteMeshTelemetry {
+  constellationHealthScore: number;
+  activeNodes: LeoSatelliteNode[];
+  totalPhotonThroughput: string;
+  spaceToGroundQkdLock: boolean;
+  interSatelliteLatticeLinks: number;
+  zeroTrustAttestation: 'FIPS 140-3 L4 Hardware Enclave' | 'Attested';
+  timestamp: string;
+}
+
 
 
