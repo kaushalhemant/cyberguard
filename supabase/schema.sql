@@ -83,12 +83,18 @@ ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_logs ENABLE ROW LEVEL SECURITY;
 
--- Allow service role full access (Backend Node.js API server operates with service role / secret)
-CREATE POLICY "Service Role Full Access Users" ON public.users FOR ALL USING (true);
-CREATE POLICY "Service Role Full Access Scans" ON public.scans FOR ALL USING (true);
-CREATE POLICY "Service Role Full Access Payments" ON public.payments FOR ALL USING (true);
-CREATE POLICY "Service Role Full Access Activity Logs" ON public.activity_logs FOR ALL USING (true);
-CREATE POLICY "Service Role Full Access System Logs" ON public.system_logs FOR ALL USING (true);
+-- Allow service role full access (Backend Node.js API server operates with service role secret)
+CREATE POLICY "Service Role Full Access Users" ON public.users FOR ALL TO service_role USING (true);
+CREATE POLICY "Service Role Full Access Scans" ON public.scans FOR ALL TO service_role USING (true);
+CREATE POLICY "Service Role Full Access Payments" ON public.payments FOR ALL TO service_role USING (true);
+CREATE POLICY "Service Role Full Access Activity Logs" ON public.activity_logs FOR ALL TO service_role USING (true);
+CREATE POLICY "Service Role Full Access System Logs" ON public.system_logs FOR ALL TO service_role USING (true);
+
+-- Authenticated user policies for private data isolation
+CREATE POLICY "Auth Users Read Own Profile" ON public.users FOR SELECT TO authenticated USING (auth.uid()::text = id);
+CREATE POLICY "Auth Users Read Own Scans" ON public.scans FOR SELECT TO authenticated USING (user_email = auth.jwt() ->> 'email');
+CREATE POLICY "Auth Users Insert Own Scans" ON public.scans FOR INSERT TO authenticated WITH CHECK (user_email = auth.jwt() ->> 'email');
+CREATE POLICY "Auth Users Read Own Payments" ON public.payments FOR SELECT TO authenticated USING (user_email = auth.jwt() ->> 'email');
 
 -- 8. INITIAL SEED DATA
 INSERT INTO public.users (id, email, password_hash, role, plan, scans_this_month, created_at)

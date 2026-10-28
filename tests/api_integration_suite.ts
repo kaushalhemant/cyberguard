@@ -139,6 +139,44 @@ async function runFullIntegrationSuite() {
       name: 'POST /api/stix3/export (STIX 3.0 DFIR Bundle)',
       req: { method: 'POST', url: '/api/stix3/export', query: { path: ['stix3', 'export'] }, body: { target: 'quantum-mesh.net', threatScore: 90 } },
       validator: (data: any) => data.stix3Bundle?.spec_version === '3.0' && !!data.stix3Bundle?.quantum_threat_layer
+    },
+    {
+      name: 'POST /api/scan-link (SSRF Cloud Metadata Protection)',
+      req: { method: 'POST', url: '/api/scan-link', query: { path: ['scan-link'] }, body: { url: 'http://169.254.169.254/latest/meta-data/' } },
+      validator: (data: any) => !!data.scan && data.scan.riskScore >= 90 && data.scan.detectedThreats.some((t: string) => t.includes('SSRF'))
+    },
+    {
+      name: 'POST /api/soc/hash-lookup (Unknown Hash Truthful Isolation)',
+      req: { method: 'POST', url: '/api/soc/hash-lookup', query: { path: ['soc', 'hash-lookup'] }, body: { hash: '7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069' } },
+      validator: (data: any) => data.malwareClassification === 'unknown' && data.evidence?.verdict === 'unknown'
+    },
+    {
+      name: 'POST /api/soc/incidents (Case Creation & MITRE Mapping)',
+      req: {
+        method: 'POST',
+        url: '/api/soc/incidents',
+        query: { path: ['soc', 'incidents'] },
+        body: {
+          title: 'Automated Test Incident Case',
+          target: 'test-c2.malicious.net',
+          severity: 'high',
+          priority: 'P1',
+          category: 'Phishing',
+          mitreTactic: 'Initial Access',
+          mitreTechniqueId: 'T1566'
+        }
+      },
+      validator: (data: any) => data.success === true && !!data.incident?.id && data.incident.severity === 'high' && data.incident.priority === 'P1'
+    },
+    {
+      name: 'POST /api/auth/otp/request (Single-Use OTP Generation)',
+      req: { method: 'POST', url: '/api/auth/otp/request', query: { path: ['auth', 'otp', 'request'] }, body: { email: 'secops@cyberguard.gov' } },
+      validator: (data: any) => data.success === true && !!data.demoCode && data.expiresInSeconds === 300
+    },
+    {
+      name: 'GET /api/cve/search (Exact CVE Lookup with Advisory Disclaimer)',
+      req: { method: 'GET', url: '/api/cve/search', query: { path: ['cve', 'search'], query: 'CVE-2021-44228' } },
+      validator: (data: any) => Array.isArray(data.cves) && data.cves.some((c: any) => c.id === 'CVE-2021-44228' && !!c.advisoryDisclaimer)
     }
   ];
 

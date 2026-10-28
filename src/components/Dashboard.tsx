@@ -15,7 +15,7 @@ import Terminal from './Terminal';
 import PrivacyStatementModal from './PrivacyStatementModal';
 import UsageAudit from './UsageAudit';
 import { safeJsonResponse } from '../lib/api';
-import { generateScanPdf } from '../lib/pdfGenerator';
+import { generateScanPdf, generateIncidentPdf } from '../lib/pdfGenerator';
 import {
   clientLookupEmail,
   clientAnalyzeUrl,
@@ -51,13 +51,29 @@ export default function Dashboard({
   onUserUpdate
 }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<
-    'pqc' | 'swarm' | 'deepfake' | 'satellite' | 'email' | 'link' | 'image' | 'cve' | 'osint' | 'hash' | 'siem' | 'stix'
-  >('pqc');
+    'link' | 'hash' | 'cve' | 'email' | 'siem' | 'stix' | 'osint' | 'pqc' | 'swarm' | 'deepfake' | 'satellite' | 'image'
+  >('link');
   
   const [rawViewMode, setRawViewMode] = useState<boolean>(false);
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // New Incident Creation Modal States
+  const [showNewIncidentModal, setShowNewIncidentModal] = useState(false);
+  const [newIncTitle, setNewIncTitle] = useState('');
+  const [newIncTarget, setNewIncTarget] = useState('');
+  const [newIncSeverity, setNewIncSeverity] = useState<SocIncident['severity']>('high');
+  const [newIncPriority, setNewIncPriority] = useState<'P1' | 'P2' | 'P3' | 'P4'>('P2');
+  const [newIncCategory, setNewIncCategory] = useState<SocIncident['category']>('Phishing');
+  const [newIncMitreTactic, setNewIncMitreTactic] = useState('Initial Access');
+  const [newIncMitreTechnique, setNewIncMitreTechnique] = useState('T1566.002');
+  const [newIncDescription, setNewIncDescription] = useState('');
+  const [newIncNote, setNewIncNote] = useState('');
+  const [isCreatingIncident, setIsCreatingIncident] = useState(false);
+
+  // Binary File Upload Ref for Hash Forensics
+  const binaryFileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Post-Quantum (PQC) States
   const [pqcTarget, setPqcTarget] = useState('quantum-defense.gov');
@@ -483,6 +499,181 @@ export default function Dashboard({
     setHashResult(localHash);
   };
 
+  const handleBinaryFileUpload = async (file: File) => {
+    if (!file) return;
+    setHashLoading(true);
+    setHashFileName(file.name);
+    try {
+      const buffer = await file.arrayBuffer();
+      // Compute SHA-256 in browser
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const sha256Hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      setHashInput(sha256Hex);
+
+      // Convert to Base64
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const fileBase64 = btoa(binary);
+
+      const res = await fetch('/api/soc/hash-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ hash: sha256Hex, fileName: file.name, fileBase64 })
+      });
+      if (res.ok) {
+        const data = await safeJsonResponse(res);
+        if (data && data.hash) {
+          setHashResult(data);
+          notifyCopy(`Analyzed binary ${file.name}`);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Binary upload analysis error:', err);
+    } finally {
+      setHashLoading(false);
+    }
+    const local = clientAnalyzeHash(hashInput || 'uploaded_sample', file.name);
+    setHashResult(local);
+  };
+
+  const handleCreateIncident = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newIncTitle.trim() || !newIncTarget.trim()) return;
+    setIsCreatingIncident(true);
+    try {
+      const res = await fetch('/api/soc/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          title: newIncTitle.trim(),
+          target: newIncTarget.trim(),
+          severity: newIncSeverity,
+          priority: newIncPriority,
+          category: newIncCategory,
+          mitreTactic: newIncMitreTactic,
+          mitreTechniqueId: newIncMitreTechnique,
+          description: newIncDescription || `Incident recorded for target ${newIncTarget}`,
+          note: newIncNote || 'Initial analyst triage observation'
+        })
+      });
+      if (res.ok) {
+        const data = await safeJsonResponse(res);
+        if (data?.incident) {
+          setIncidentsList(prev => [data.incident, ...prev]);
+          setSelectedIncident(data.incident);
+          setShowNewIncidentModal(false);
+          setNewIncTitle('');
+          setNewIncTarget('');
+          setNewIncDescription('');
+          setNewIncNote('');
+          notifyCopy('SIEM Incident Created');
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to create incident:', err);
+    } finally {
+      setIsCreatingIncident(false);
+    }
+  };
+
+  const handleResetDemoIncidents = async () => {
+    try {
+      const res = await fetch('/api/soc/incidents/reset-demo', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await safeJsonResponse(res);
+        if (data?.incidents) {
+          setIncidentsList(data.incidents);
+          if (data.incidents.length > 0) setSelectedIncident(data.incidents[0]);
+          notifyCopy('Demo incidents reset to baseline');
+        }
+      }
+    } catch (err) {
+      console.error('Reset demo error:', err);
+    }
+  };
+
+  const handleEscalateScanToIncident = async (scan: ScanResult) => {
+    const target = scan.targetLink || scan.targetEmail || scan.imageFileName || 'Audited Target';
+    const title = `Security Alert: ${scan.scanType?.toUpperCase() || 'SCAN'} Threat Detected [${scan.riskScore}/100]`;
+    const severity: SocIncident['severity'] = scan.riskScore >= 70 ? 'critical' : scan.riskScore >= 40 ? 'high' : 'medium';
+    try {
+      const res = await fetch('/api/soc/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          title,
+          target,
+          severity,
+          priority: scan.riskScore >= 70 ? 'P1' : 'P2',
+          category: scan.scanType === 'link' ? 'Phishing' : scan.scanType === 'email' ? 'Credential Abuse' : 'Malware Payload',
+          mitreTactic: scan.scanType === 'link' ? 'Initial Access' : 'Credential Access',
+          mitreTechniqueId: scan.scanType === 'link' ? 'T1566.002' : 'T1110',
+          description: scan.forensicSummary?.substring(0, 300) || `Automated threat detection triggered with risk index ${scan.riskScore}/100.`,
+          note: `Escalated directly from CyberGuard Workstation scan ${scan.id}`
+        })
+      });
+      if (res.ok) {
+        const data = await safeJsonResponse(res);
+        if (data?.incident) {
+          setIncidentsList(prev => [data.incident, ...prev]);
+          setSelectedIncident(data.incident);
+          setActiveTab('siem');
+          notifyCopy('Scan escalated to SIEM Case!');
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Escalation error:', err);
+    }
+  };
+
+  const loadDemoPreset = (preset: 'typosquat' | 'clean_url' | 'eicar_malware' | 'unknown_hash' | 'log4shell' | 'leaked_email') => {
+    switch (preset) {
+      case 'typosquat':
+        setScanUrl('https://paypa1-secure-login.xyz/verify');
+        setActiveTab('link');
+        executeUrlScan('https://paypa1-secure-login.xyz/verify');
+        break;
+      case 'clean_url':
+        setScanUrl('https://cloudflare.com');
+        setActiveTab('link');
+        executeUrlScan('https://cloudflare.com');
+        break;
+      case 'eicar_malware':
+        setHashInput('44d88612fea8a8f36de82e1278abb02f');
+        setHashFileName('eicar_test_binary.com');
+        setActiveTab('hash');
+        executeHashLookup('44d88612fea8a8f36de82e1278abb02f');
+        break;
+      case 'unknown_hash':
+        setHashInput('a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0');
+        setHashFileName('unverified_system_payload.dll');
+        setActiveTab('hash');
+        executeHashLookup('a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0');
+        break;
+      case 'log4shell':
+        setCveQuery('CVE-2021-44228');
+        setActiveTab('cve');
+        executeCveSearch('CVE-2021-44228');
+        break;
+      case 'leaked_email':
+        setScanEmail('user@yahoo.com');
+        setActiveTab('email');
+        executeEmailScan('user@yahoo.com');
+        break;
+    }
+  };
+
   const handleTriageSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedIncident) return;
@@ -638,41 +829,147 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* 2030 VECTOR MODULE SELECTOR TAB BAR */}
-      <div className="soc-panel p-1.5 flex flex-wrap gap-1 border border-[#202D42] text-[11px] font-mono font-bold">
-        {[
-          { id: 'pqc', label: '⚛️ POST-QUANTUM (PQC)', icon: Atom, highlight: true },
-          { id: 'swarm', label: '🤖 AI SOC SWARM', icon: Bot, highlight: true },
-          { id: 'deepfake', label: '👁️ DEEPFAKE LAB', icon: BrainCircuit, highlight: true },
-          { id: 'satellite', label: '🛰️ LEO SATELLITE MESH', icon: Satellite, highlight: true },
-          { id: 'email', label: 'EMAIL BREACH', icon: Mail },
-          { id: 'link', label: 'URL REPUTATION', icon: Link2 },
-          { id: 'image', label: 'VISUAL OCR', icon: FileText },
-          { id: 'cve', label: 'NIST CVE DB', icon: Database },
-          { id: 'osint', label: 'OSINT INSPECTOR', icon: Crosshair },
-          { id: 'hash', label: 'MALWARE HASH', icon: FileCode },
-          { id: 'siem', label: 'SIEM INCIDENTS', icon: ShieldAlert },
-          { id: 'stix', label: 'STIX 3.0 BUNDLE', icon: Layers },
-        ].map(tab => {
-          const IconComp = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-3 py-1.5 flex items-center gap-1.5 rounded-sm transition-all cursor-pointer ${
-                isActive 
-                  ? (tab.highlight 
-                      ? 'bg-[#131B2A] text-[#C084FC] border border-[#A855F7] shadow-[0_0_12px_rgba(168,85,247,0.3)]' 
-                      : 'bg-[#131B2A] text-[#00E5FF] border border-[#00E5FF] shadow-[0_0_12px_rgba(0,229,255,0.25)]')
-                  : 'text-[#8392A5] hover:text-[#F0F4F8] border border-transparent hover:border-[#202D42]'
-              }`}
-            >
-              <IconComp className={`w-3.5 h-3.5 ${isActive ? (tab.highlight ? 'text-[#C084FC]' : 'text-[#00E5FF]') : ''}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      {/* REPRODUCIBLE DEMONSTRATION WORKFLOW TOOLBAR */}
+      <div className="soc-panel p-3 border border-[#00E5FF]/30 bg-gradient-to-r from-[#0a1525] via-[#09111c] to-[#0a1525] space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#202D42] pb-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#00E5FF] animate-pulse" />
+            <span className="font-mono text-xs font-bold text-white uppercase tracking-wider">
+              Investigation Demonstration Presets:
+            </span>
+            <span className="text-[10px] font-mono text-[#8392A5]">
+              (One-click reproducible evaluation & triage)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleResetDemoIncidents}
+            className="btn-soc px-2.5 py-1 text-[10px] text-[#FF9900] border-[#FF9900]/40 hover:bg-[#FF9900]/10 flex items-center gap-1.5 cursor-pointer"
+            title="Reset demo cases to initial state"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>RESET DEMO CASES</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 font-mono text-[10px]">
+          <button
+            type="button"
+            onClick={() => loadDemoPreset('typosquat')}
+            className="p-1.5 bg-[#06090F] hover:bg-[#131B2A] border border-[#FF334B]/40 hover:border-[#FF334B] rounded-sm text-left transition-colors cursor-pointer"
+          >
+            <span className="text-[#FF334B] font-bold block truncate">🚨 Typosquat URL</span>
+            <span className="text-[#8392A5] text-[9px] truncate block">paypa1-secure-login</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => loadDemoPreset('clean_url')}
+            className="p-1.5 bg-[#06090F] hover:bg-[#131B2A] border border-[#10B981]/40 hover:border-[#10B981] rounded-sm text-left transition-colors cursor-pointer"
+          >
+            <span className="text-[#10B981] font-bold block truncate">🟢 Clean Domain</span>
+            <span className="text-[#8392A5] text-[9px] truncate block">cloudflare.com</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => loadDemoPreset('eicar_malware')}
+            className="p-1.5 bg-[#06090F] hover:bg-[#131B2A] border border-[#FF334B]/40 hover:border-[#FF334B] rounded-sm text-left transition-colors cursor-pointer"
+          >
+            <span className="text-[#FF334B] font-bold block truncate">🦠 Malware Hash</span>
+            <span className="text-[#8392A5] text-[9px] truncate block">EICAR AV Test MD5</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => loadDemoPreset('unknown_hash')}
+            className="p-1.5 bg-[#06090F] hover:bg-[#131B2A] border border-[#E0C000]/40 hover:border-[#E0C000] rounded-sm text-left transition-colors cursor-pointer"
+          >
+            <span className="text-[#E0C000] font-bold block truncate">❓ Unknown Hash</span>
+            <span className="text-[#8392A5] text-[9px] truncate block">Unindexed Payload</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => loadDemoPreset('log4shell')}
+            className="p-1.5 bg-[#06090F] hover:bg-[#131B2A] border border-[#00E5FF]/40 hover:border-[#00E5FF] rounded-sm text-left transition-colors cursor-pointer"
+          >
+            <span className="text-[#00E5FF] font-bold block truncate">🐞 Critical CVE</span>
+            <span className="text-[#8392A5] text-[9px] truncate block">CVE-2021-44228</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => loadDemoPreset('leaked_email')}
+            className="p-1.5 bg-[#06090F] hover:bg-[#131B2A] border border-[#FF334B]/40 hover:border-[#FF334B] rounded-sm text-left transition-colors cursor-pointer"
+          >
+            <span className="text-[#FF334B] font-bold block truncate">👤 Leaked Account</span>
+            <span className="text-[#8392A5] text-[9px] truncate block">user@yahoo.com</span>
+          </button>
+        </div>
+      </div>
+
+      {/* THREAT INVESTIGATION WORKSTATION TAB BAR */}
+      <div className="soc-panel p-1.5 space-y-1.5 border border-[#202D42] text-[11px] font-mono font-bold">
+        {/* Primary Investigation Modules */}
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-[#8392A5] text-[10px] uppercase px-2 font-bold tracking-wider">Workstation:</span>
+          {[
+            { id: 'link', label: '🌐 URL & DOMAIN', icon: Link2 },
+            { id: 'hash', label: '⚡ MALWARE HASH', icon: FileCode },
+            { id: 'cve', label: '🛡️ NIST CVE DB', icon: Database },
+            { id: 'email', label: '📧 EMAIL BREACH', icon: Mail },
+            { id: 'siem', label: '🚨 SIEM INCIDENTS', icon: ShieldAlert },
+            { id: 'stix', label: '📦 STIX 2.1 DFIR', icon: Layers },
+            { id: 'osint', label: '🛰️ OSINT IP', icon: Crosshair },
+          ].map(tab => {
+            const IconComp = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-3 py-1.5 flex items-center gap-1.5 rounded-sm transition-all cursor-pointer ${
+                  isActive 
+                    ? 'bg-[#131B2A] text-[#00E5FF] border border-[#00E5FF] shadow-[0_0_12px_rgba(0,229,255,0.25)] font-bold'
+                    : 'text-[#8392A5] hover:text-[#F0F4F8] border border-transparent hover:border-[#202D42]'
+                }`}
+              >
+                <IconComp className={`w-3.5 h-3.5 ${isActive ? 'text-[#00E5FF]' : ''}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Advanced Research / 2030 Defense Labs */}
+        <div className="flex flex-wrap items-center gap-1 border-t border-[#202D42]/60 pt-1.5">
+          <span className="text-[#A855F7] text-[10px] uppercase px-2 font-bold tracking-wider">Advanced Labs:</span>
+          {[
+            { id: 'pqc', label: '⚛️ POST-QUANTUM (PQC)', icon: Atom, highlight: true },
+            { id: 'swarm', label: '🤖 AI SOC SWARM', icon: Bot, highlight: true },
+            { id: 'deepfake', label: '👁️ DEEPFAKE LAB', icon: BrainCircuit, highlight: true },
+            { id: 'satellite', label: '🛰️ LEO SATELLITE', icon: Satellite, highlight: true },
+            { id: 'image', label: '📄 VISUAL OCR', icon: FileText },
+          ].map(tab => {
+            const IconComp = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-2.5 py-1 text-[10px] flex items-center gap-1.5 rounded-sm transition-all cursor-pointer ${
+                  isActive 
+                    ? 'bg-[#131B2A] text-[#C084FC] border border-[#A855F7] shadow-[0_0_12px_rgba(168,85,247,0.3)] font-bold'
+                    : 'text-[#8392A5] hover:text-[#F0F4F8] border border-transparent hover:border-[#202D42]'
+                }`}
+              >
+                <IconComp className={`w-3 h-3 ${isActive ? 'text-[#C084FC]' : ''}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* MAIN 3-COLUMN WORKSTATION LAYOUT */}
@@ -1182,21 +1479,80 @@ export default function Dashboard({
               <div className="border-b border-[#202D42] pb-2 flex items-center justify-between">
                 <h2 className="font-display font-bold text-sm uppercase text-white flex items-center gap-2">
                   <FileCode className="w-4 h-4 text-[#00E5FF]" />
-                  <span>Malware Hash Forensics</span>
+                  <span>Binary & Hash Forensics</span>
                 </h2>
-                <span className="status-chip status-chip-high">SHA-256</span>
+                <span className="status-chip status-chip-high">SHA-256 / ENTROPY</span>
               </div>
-              <form onSubmit={(e) => { e.preventDefault(); executeHashLookup(hashInput); }} className="space-y-3">
+              <p className="text-[11px] text-[#8392A5] font-mono leading-relaxed">
+                Upload executable or document payloads to dissect authentic magic bytes, calculate exact Shannon entropy (0-8), and evaluate cryptographic hashes against threat signatures.
+              </p>
+
+              {/* Upload Dropzone */}
+              <div 
+                onClick={() => binaryFileInputRef.current?.click()}
+                className="border-2 border-dashed border-[#202D42] hover:border-[#00E5FF] p-3 text-center cursor-pointer rounded-sm bg-[#06090F] transition-colors"
+              >
+                <input
+                  type="file"
+                  ref={binaryFileInputRef}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleBinaryFileUpload(f);
+                  }}
+                  className="hidden"
+                />
+                <UploadCloud className="w-5 h-5 text-[#00E5FF] mx-auto mb-1" />
+                <span className="text-xs font-mono text-[#F0F4F8] block font-bold">
+                  {hashFileName ? `Selected: ${hashFileName}` : 'Drop Executable / Payload or Browse'}
+                </span>
+                <span className="text-[10px] font-mono text-[#8392A5]">
+                  Calculates true Shannon entropy & magic bytes (Max 15MB)
+                </span>
+              </div>
+
+              <div className="text-center text-[10px] font-mono text-[#8392A5] uppercase font-bold">
+                — OR ENTER HASH STRING —
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); executeHashLookup(hashInput); }} className="space-y-2">
                 <input
                   type="text"
                   value={hashInput}
                   onChange={(e) => setHashInput(e.target.value)}
-                  placeholder="44d88612fea8a8f36de82e1278abb02f"
+                  placeholder="SHA-256, SHA-1, or MD5 string..."
                   className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] font-mono rounded-sm focus:border-[#00E5FF] focus:outline-none"
                 />
-                <button type="submit" disabled={hashLoading} className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer">
+
+                <div className="grid grid-cols-2 gap-1.5 font-mono text-[9px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHashInput('44d88612fea8a8f36de82e1278abb02f');
+                      setHashFileName('eicar_av_test.com');
+                      executeHashLookup('44d88612fea8a8f36de82e1278abb02f');
+                    }}
+                    className="p-1.5 bg-[#131B2A] border border-[#FF334B]/40 hover:border-[#FF334B] text-left rounded-sm cursor-pointer"
+                  >
+                    <span className="text-[#FF334B] font-bold block">🚨 EICAR Test MD5</span>
+                    <span className="text-[#8392A5] truncate block">44d88612...</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHashInput('a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0');
+                      setHashFileName('unindexed_driver.sys');
+                      executeHashLookup('a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0');
+                    }}
+                    className="p-1.5 bg-[#131B2A] border border-[#E0C000]/40 hover:border-[#E0C000] text-left rounded-sm cursor-pointer"
+                  >
+                    <span className="text-[#E0C000] font-bold block">❓ Unknown Hash</span>
+                    <span className="text-[#8392A5] truncate block">Shows unknown verdict</span>
+                  </button>
+                </div>
+
+                <button type="submit" disabled={hashLoading} className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
                   <Cpu className="w-3.5 h-3.5" />
-                  <span>ANALYZE BINARY HASH</span>
+                  <span>{hashLoading ? 'DISSECTING BINARY...' : 'ANALYZE HASH SIGNATURE'}</span>
                 </button>
               </form>
             </div>
@@ -1212,10 +1568,36 @@ export default function Dashboard({
                 </h2>
                 <span className="status-chip status-chip-critical">MATRIX</span>
               </div>
-              <button onClick={fetchIncidents} disabled={incidentsLoading} className="w-full btn-soc py-2 flex items-center justify-center gap-2 cursor-pointer">
-                <RefreshCw className={`w-3.5 h-3.5 ${incidentsLoading ? 'animate-spin' : ''}`} />
-                <span>REFRESH SIEM QUEUE</span>
-              </button>
+              <p className="text-[11px] text-[#8392A5] font-mono leading-relaxed">
+                Triage and manage enterprise security incidents, track MITRE ATT&CK tactics, assign priority (P1-P4), record containment actions, and export official DFIR case briefings.
+              </p>
+              
+              <div className="space-y-2">
+                <button 
+                  onClick={() => setShowNewIncidentModal(true)} 
+                  className="w-full btn-soc btn-soc-primary py-2 flex items-center justify-center gap-2 cursor-pointer font-bold"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>+ CREATE NEW INCIDENT</span>
+                </button>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={fetchIncidents} 
+                    disabled={incidentsLoading} 
+                    className="btn-soc py-1.5 text-[10px] flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${incidentsLoading ? 'animate-spin' : ''}`} />
+                    <span>REFRESH QUEUE</span>
+                  </button>
+                  <button 
+                    onClick={handleResetDemoIncidents} 
+                    className="btn-soc py-1.5 text-[10px] text-[#FF9900] border-[#FF9900]/40 hover:bg-[#FF9900]/10 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>RESET DEMO</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1513,22 +1895,33 @@ export default function Dashboard({
                 {currentScan.forensicSummary || currentScan.aiSummary}
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-[#202D42]">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#202D42]">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => generateScanPdf(currentScan)}
+                    className="btn-soc btn-soc-primary px-3 py-1 text-[10px] flex items-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>DOWNLOAD PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSelectReport(currentScan)}
+                    className="btn-soc px-3 py-1 text-[10px] flex items-center gap-1 text-[#00E5FF] border-[#00E5FF]/40 cursor-pointer"
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>FULL REPORT</span>
+                  </button>
+                </div>
                 <button
                   type="button"
-                  onClick={() => generateScanPdf(currentScan)}
-                  className="btn-soc btn-soc-primary px-3 py-1 text-[10px] flex items-center gap-1 cursor-pointer"
+                  onClick={() => handleEscalateScanToIncident(currentScan)}
+                  className="btn-soc px-3 py-1 text-[10px] flex items-center gap-1 text-[#FF334B] border-[#FF334B]/40 hover:bg-[#FF334B]/10 cursor-pointer font-bold"
+                  title="Promote this scan into an active SIEM incident case"
                 >
-                  <Download className="w-3 h-3" />
-                  <span>DOWNLOAD PDF</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSelectReport(currentScan)}
-                  className="btn-soc px-3 py-1 text-[10px] flex items-center gap-1 text-[#00E5FF] border-[#00E5FF]/40 cursor-pointer"
-                >
-                  <Eye className="w-3 h-3" />
-                  <span>FULL REPORT VIEW</span>
+                  <ShieldAlert className="w-3 h-3" />
+                  <span>ESCALATE TO SIEM CASE</span>
                 </button>
               </div>
             </div>
@@ -1569,34 +1962,285 @@ export default function Dashboard({
             </div>
           )}
 
+          {/* COMPREHENSIVE 4-TIER HASH FORENSICS VIEW */}
           {activeTab === 'hash' && hashResult && (
             <div className="soc-panel p-4 space-y-3 font-mono text-xs">
               <div className="border-b border-[#202D42] pb-2 flex items-center justify-between">
-                <h3 className="font-display font-bold text-sm uppercase text-white">Hash Forensics: {hashResult.fileName || hashResult.hash}</h3>
-                <span className={`status-chip ${hashResult.malwareClassification === 'malicious' ? 'status-chip-critical' : 'status-chip-low'}`}>
+                <div>
+                  <span className="text-[10px] text-[#8392A5] block uppercase font-bold">
+                    Target Payload: {hashResult.fileName || 'Binary Sample'}
+                  </span>
+                  <h3 className="font-display font-bold text-sm uppercase text-white mt-0.5">
+                    Binary & Hash Dissection Evidence
+                  </h3>
+                </div>
+                <span className={`status-chip ${
+                  hashResult.malwareClassification === 'malicious' 
+                    ? 'status-chip-critical' 
+                    : hashResult.malwareClassification === 'suspicious' 
+                    ? 'status-chip-high' 
+                    : hashResult.malwareClassification === 'clean' 
+                    ? 'status-chip-low' 
+                    : 'status-chip-quantum'
+                }`}>
                   {hashResult.malwareClassification.toUpperCase()}
                 </span>
               </div>
-              <div className="bg-[#06090F] p-2.5 border border-[#202D42] space-y-1 text-[11px]">
-                <div><span className="text-[#8392A5]">ENTROPY:</span> {hashResult.entropyScore}/8.00</div>
-                <div><span className="text-[#8392A5]">FORMAT:</span> {hashResult.detectedFormat}</div>
+
+              {/* Hash string display */}
+              <div className="bg-[#06090F] p-2.5 border border-[#202D42] space-y-1">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-[#8392A5] font-bold uppercase">{hashResult.hashType || 'CRYPTOGRAPHIC'} HASH:</span>
+                  <button onClick={() => notifyCopy('Hash copied')} className="text-[#00E5FF] hover:underline cursor-pointer">COPY</button>
+                </div>
+                <div className="text-[11px] text-[#00E5FF] break-all select-all">{hashResult.hash}</div>
+              </div>
+
+              {/* Observed Metrics Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
+                <div className="bg-[#06090F] p-2 border border-[#202D42] rounded-sm">
+                  <span className="text-[#8392A5] block">FILE SIZE</span>
+                  <span className="text-[#F0F4F8] font-bold text-xs">
+                    {hashResult.fileSizeBytes ? `${(hashResult.fileSizeBytes / 1024).toFixed(1)} KB` : 'Payload Required'}
+                  </span>
+                </div>
+                <div className="bg-[#06090F] p-2 border border-[#202D42] rounded-sm">
+                  <span className="text-[#8392A5] block">SHANNON ENTROPY</span>
+                  <span className={`font-bold text-xs ${hashResult.entropyScore > 7.0 ? 'text-[#FF334B]' : 'text-[#10B981]'}`}>
+                    {hashResult.entropyScore ? `${hashResult.entropyScore.toFixed(2)} / 8.00` : '0.00 / 8.00'}
+                  </span>
+                </div>
+                <div className="bg-[#06090F] p-2 border border-[#202D42] rounded-sm">
+                  <span className="text-[#8392A5] block">DETECTED FORMAT</span>
+                  <span className="text-[#F0F4F8] font-bold truncate block">{hashResult.detectedFormat || 'Unknown'}</span>
+                </div>
+                <div className="bg-[#06090F] p-2 border border-[#202D42] rounded-sm">
+                  <span className="text-[#8392A5] block">MAGIC BYTES</span>
+                  <span className="text-[#00E5FF] font-bold truncate block">{hashResult.magicBytes || 'N/A'}</span>
+                </div>
+              </div>
+
+              {/* Indicators & Recommendation */}
+              <div className="space-y-2">
+                <div className="bg-[#06090F] p-2.5 border border-[#202D42] space-y-1">
+                  <span className="text-[10px] text-[#8392A5] uppercase font-bold block">Threat Indicators & Observations:</span>
+                  <ul className="space-y-1 text-[11px]">
+                    {hashResult.threatIndicators?.map((ind, idx) => (
+                      <li key={idx} className="flex items-start gap-1.5 text-[#F0F4F8]">
+                        <span className="text-[#00E5FF]">•</span>
+                        <span>{ind}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {hashResult.malwareClassification === 'unknown' && (
+                  <div className="p-2.5 bg-[#FF9900]/10 border border-[#FF9900]/30 text-[#FF9900] text-[10px] space-y-1">
+                    <strong className="block uppercase">Evidence Limitation Notice:</strong>
+                    <p>
+                      This hash was not identified in verified malware threat lists or standard clean baseline ledgers. 
+                      CyberGuard strictly avoids classifying unindexed hashes as clean. Upload the physical binary above to perform full Shannon byte entropy calculation and static header dissection.
+                    </p>
+                  </div>
+                )}
+
+                <div className="bg-[#131B2A] p-2.5 border border-[#202D42] space-y-1">
+                  <span className="text-[10px] text-[#8392A5] uppercase font-bold block">SOC Recommendation:</span>
+                  <p className="text-[11px] text-[#F0F4F8]">{hashResult.recommendation}</p>
+                </div>
+              </div>
+
+              {/* Escalate button */}
+              <div className="pt-2 border-t border-[#202D42] flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleEscalateScanToIncident({
+                      id: 'hash-' + Date.now().toString(36),
+                      targetEmail: '',
+                      targetLink: hashResult.fileName || hashResult.hash,
+                      timestamp: new Date().toISOString(),
+                      resultCount: 1,
+                      breaches: [],
+                      riskScore: hashResult.malwareClassification === 'malicious' ? 95 : 30,
+                      scanType: 'image',
+                      imageFileName: hashResult.fileName || hashResult.hash,
+                      forensicSummary: `Binary Forensics: Hash ${hashResult.hash} classified as ${hashResult.malwareClassification}. Entropy: ${hashResult.entropyScore}/8.00.`
+                    });
+                  }}
+                  className="btn-soc px-3 py-1.5 text-[10px] flex items-center gap-1.5 text-[#FF334B] border-[#FF334B]/40 hover:bg-[#FF334B]/10 cursor-pointer font-bold"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>ESCALATE TO SIEM CASE</span>
+                </button>
               </div>
             </div>
           )}
 
+          {/* ACTIVE SIEM INCIDENT MANAGEMENT & TRIAGE */}
           {activeTab === 'siem' && (
-            <div className="soc-panel p-4 space-y-3 font-mono text-xs">
-              <h3 className="font-display font-bold text-sm uppercase text-white">Active SIEM Incidents</h3>
-              <div className="space-y-2">
-                {incidentsList.map(inc => (
-                  <div key={inc.id} onClick={() => setSelectedIncident(inc)} className="p-3 bg-[#06090F] border border-[#202D42] rounded-sm cursor-pointer hover:border-[#00E5FF]">
-                    <div className="flex items-center justify-between">
-                      <strong className="text-white">{inc.id}: {inc.title}</strong>
-                      <span className={`status-chip ${inc.severity === 'critical' ? 'status-chip-critical' : 'status-chip-high'}`}>{inc.severity}</span>
+            <div className="space-y-4 font-mono text-xs">
+              {/* Incident List */}
+              <div className="soc-panel p-4 space-y-3">
+                <div className="border-b border-[#202D42] pb-2 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-display font-bold text-sm uppercase text-white">Active SIEM Incidents Queue</h3>
+                    <span className="text-[10px] text-[#8392A5]">{incidentsList.length} Incident Cases Recorded</span>
+                  </div>
+                  <button
+                    onClick={() => setShowNewIncidentModal(true)}
+                    className="btn-soc btn-soc-primary px-2.5 py-1 text-[10px] flex items-center gap-1 cursor-pointer font-bold"
+                  >
+                    <Shield className="w-3 h-3" />
+                    <span>+ NEW INCIDENT</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {incidentsList.map(inc => {
+                    const isSelected = selectedIncident?.id === inc.id;
+                    return (
+                      <div
+                        key={inc.id}
+                        onClick={() => setSelectedIncident(inc)}
+                        className={`p-3 border rounded-sm cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'bg-[#131B2A] border-[#00E5FF] shadow-[0_0_8px_rgba(0,229,255,0.2)]' 
+                            : 'bg-[#06090F] border-[#202D42] hover:border-[#8392A5]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[#00E5FF] font-bold text-[11px]">{inc.id}</span>
+                            <strong className="text-white text-[11px] truncate max-w-[200px]">{inc.title}</strong>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`status-chip ${inc.severity === 'critical' ? 'status-chip-critical' : inc.severity === 'high' ? 'status-chip-high' : 'status-chip-medium'}`}>
+                              {inc.severity}
+                            </span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-sm bg-[#202D42] text-[#8392A5] uppercase">
+                              {inc.status}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-[#8392A5] pt-1 mt-1 border-t border-[#202D42]/60">
+                          <span className="truncate max-w-[180px]">Target: {inc.target}</span>
+                          <span className="text-[#10B981]">{inc.mitreTechniqueId}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Selected Incident Triage Details */}
+              {selectedIncident && (
+                <div className="soc-panel p-4 space-y-4">
+                  <div className="border-b border-[#202D42] pb-2 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-[#00E5FF] font-bold block">{selectedIncident.id} — CASE INVESTIGATION</span>
+                      <h4 className="font-display font-bold text-sm uppercase text-white mt-0.5">{selectedIncident.title}</h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => generateIncidentPdf(selectedIncident)}
+                      className="btn-soc btn-soc-primary px-3 py-1.5 text-[10px] flex items-center gap-1.5 cursor-pointer font-bold"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>EXPORT DFIR PDF</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
+                    <div className="bg-[#06090F] p-2 border border-[#202D42]">
+                      <span className="text-[#8392A5] block">SEVERITY</span>
+                      <span className={`font-bold text-xs uppercase ${selectedIncident.severity === 'critical' ? 'text-[#FF334B]' : 'text-[#FF9900]'}`}>
+                        {selectedIncident.severity}
+                      </span>
+                    </div>
+                    <div className="bg-[#06090F] p-2 border border-[#202D42]">
+                      <span className="text-[#8392A5] block">MITRE ATT&CK</span>
+                      <span className="text-[#00E5FF] font-bold text-xs">{selectedIncident.mitreTechniqueId}</span>
+                    </div>
+                    <div className="bg-[#06090F] p-2 border border-[#202D42]">
+                      <span className="text-[#8392A5] block">STATUS</span>
+                      <span className="text-[#10B981] font-bold text-xs uppercase">{selectedIncident.status}</span>
+                    </div>
+                    <div className="bg-[#06090F] p-2 border border-[#202D42]">
+                      <span className="text-[#8392A5] block">OFFICER</span>
+                      <span className="text-[#F0F4F8] font-bold text-xs truncate block">{selectedIncident.assignedOfficer || 'Auto-Triage'}</span>
                     </div>
                   </div>
-                ))}
-              </div>
+
+                  <div className="bg-[#06090F] p-3 border border-[#202D42] space-y-1 text-[11px]">
+                    <span className="text-[10px] text-[#8392A5] uppercase font-bold block">Incident Description:</span>
+                    <p className="text-[#F0F4F8] leading-relaxed">{selectedIncident.description}</p>
+                    {selectedIncident.containmentActionTaken && (
+                      <div className="pt-2 border-t border-[#202D42] text-[#10B981]">
+                        <strong className="block text-[10px] uppercase">Containment Action Executed:</strong>
+                        <span>{selectedIncident.containmentActionTaken}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Analyst Notes timeline */}
+                  {selectedIncident.notes && selectedIncident.notes.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] text-[#8392A5] uppercase font-bold block">Analyst Investigation Notes:</span>
+                      <div className="space-y-1 max-h-36 overflow-y-auto">
+                        {selectedIncident.notes.map((n, idx) => (
+                          <div key={idx} className="p-2 bg-[#06090F] border border-[#202D42] text-[11px] text-[#F0F4F8]">
+                            • {n}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Triage Decision Form */}
+                  <form onSubmit={handleTriageSubmit} className="space-y-3 pt-2 border-t border-[#202D42]">
+                    <span className="text-[10px] text-[#00E5FF] uppercase font-bold block">Record Triage Decision & Containment:</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-[#8392A5] block">Update Case Status</label>
+                        <select
+                          value={triageStatus}
+                          onChange={(e) => setTriageStatus(e.target.value as any)}
+                          className="w-full bg-[#06090F] border border-[#202D42] px-2.5 py-1.5 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                        >
+                          <option value="investigating">Investigating</option>
+                          <option value="mitigated">Mitigated / Contained</option>
+                          <option value="escalated">Escalated</option>
+                          <option value="false_positive">False Positive</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-[#8392A5] block">Containment Action</label>
+                        <input
+                          type="text"
+                          value={containmentActionInput}
+                          onChange={(e) => setContainmentActionInput(e.target.value)}
+                          placeholder="e.g. Blocked domain on DNS resolver, isolated host"
+                          className="w-full bg-[#06090F] border border-[#202D42] px-2.5 py-1.5 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-[#8392A5] block">Add Analyst Triage Note</label>
+                      <input
+                        type="text"
+                        value={triageNote}
+                        onChange={(e) => setTriageNote(e.target.value)}
+                        placeholder="Log observation or IOC correlation details..."
+                        className="w-full bg-[#06090F] border border-[#202D42] px-2.5 py-1.5 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                      />
+                    </div>
+                    <button type="submit" className="w-full btn-soc btn-soc-primary py-2 cursor-pointer font-bold">
+                      SAVE TRIAGE DECISION & UPDATE CASE
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
           )}
 
@@ -1788,6 +2432,160 @@ export default function Dashboard({
         userEmail={user.email} 
         onWipeData={handleWipeScans} 
       />
+
+      {/* NEW SIEM INCIDENT CASE CREATION MODAL */}
+      {showNewIncidentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs font-mono">
+          <div className="bg-[#090D14] border border-[#00E5FF]/40 rounded-sm w-full max-w-lg p-5 space-y-4 shadow-[0_0_30px_rgba(0,229,255,0.15)] text-xs">
+            <div className="flex items-center justify-between border-b border-[#202D42] pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-[#FF334B]" />
+                <h3 className="font-display font-bold text-sm uppercase text-white">Create New SIEM Incident</h3>
+              </div>
+              <button
+                onClick={() => setShowNewIncidentModal(false)}
+                className="text-[#8392A5] hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateIncident} className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] text-[#8392A5] uppercase font-bold block">Incident Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={newIncTitle}
+                  onChange={(e) => setNewIncTitle(e.target.value)}
+                  placeholder="e.g. Active C2 Beaconing to Suspicious DNS"
+                  className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[#8392A5] uppercase font-bold block">Target Indicator *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newIncTarget}
+                    onChange={(e) => setNewIncTarget(e.target.value)}
+                    placeholder="Domain, IP, Hash, or CVE..."
+                    className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[#8392A5] uppercase font-bold block">Category</label>
+                  <select
+                    value={newIncCategory}
+                    onChange={(e) => setNewIncCategory(e.target.value as any)}
+                    className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                  >
+                    <option value="Phishing">Phishing</option>
+                    <option value="Ransomware">Ransomware</option>
+                    <option value="Zero-Day">Zero-Day</option>
+                    <option value="Credential Abuse">Credential Abuse</option>
+                    <option value="DDoS">DDoS</option>
+                    <option value="Malware Payload">Malware Payload</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[#8392A5] uppercase font-bold block">Severity</label>
+                  <select
+                    value={newIncSeverity}
+                    onChange={(e) => setNewIncSeverity(e.target.value as any)}
+                    className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                  >
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[#8392A5] uppercase font-bold block">Priority SLA</label>
+                  <select
+                    value={newIncPriority}
+                    onChange={(e) => setNewIncPriority(e.target.value as any)}
+                    className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                  >
+                    <option value="P1">P1 - Critical Blocker (15m SLA)</option>
+                    <option value="P2">P2 - High Priority (1h SLA)</option>
+                    <option value="P3">P3 - Medium (4h SLA)</option>
+                    <option value="P4">P4 - Low / Informational</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[#8392A5] uppercase font-bold block">MITRE Tactic</label>
+                  <input
+                    type="text"
+                    value={newIncMitreTactic}
+                    onChange={(e) => setNewIncMitreTactic(e.target.value)}
+                    placeholder="e.g. Initial Access"
+                    className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[#8392A5] uppercase font-bold block">Technique ID</label>
+                  <input
+                    type="text"
+                    value={newIncMitreTechnique}
+                    onChange={(e) => setNewIncMitreTechnique(e.target.value)}
+                    placeholder="e.g. T1566.002"
+                    className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] text-[#8392A5] uppercase font-bold block">Case Description</label>
+                <textarea
+                  rows={2}
+                  value={newIncDescription}
+                  onChange={(e) => setNewIncDescription(e.target.value)}
+                  placeholder="Summary of threat vector and initial telemetry..."
+                  className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none resize-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] text-[#8392A5] uppercase font-bold block">Initial Analyst Note</label>
+                <input
+                  type="text"
+                  value={newIncNote}
+                  onChange={(e) => setNewIncNote(e.target.value)}
+                  placeholder="First triage note or containment step..."
+                  className="w-full bg-[#06090F] border border-[#202D42] px-3 py-2 text-xs text-[#F0F4F8] rounded-sm focus:border-[#00E5FF] focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#202D42]">
+                <button
+                  type="button"
+                  onClick={() => setShowNewIncidentModal(false)}
+                  className="btn-soc px-4 py-2 cursor-pointer"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingIncident}
+                  className="btn-soc btn-soc-primary px-4 py-2 cursor-pointer font-bold disabled:opacity-50"
+                >
+                  {isCreatingIncident ? 'CREATING CASE...' : 'CREATE SIEM INCIDENT'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

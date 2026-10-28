@@ -5,6 +5,7 @@ import path from 'path';
 import { ScanRiskReport, TriggeredFlag, RiskLevel } from '../../types/scanners';
 import { checkPhishStats } from './phishstatsScanner';
 import { checkVirusTotalUrl } from './virustotalScanner';
+import { validateUrlSsrf, isPrivateOrReservedIpv4 } from '../security';
 
 
 /**
@@ -110,6 +111,11 @@ async function inspectTlsCert(hostname: string, port: number = 443): Promise<{
 } | null> {
   return new Promise((resolve) => {
     try {
+      // SSRF Guard: Do not initiate TLS connection to loopback or private hostnames
+      if (isPrivateOrReservedIpv4(hostname) || hostname === 'localhost') {
+        return resolve(null);
+      }
+
       const socket = tls.connect({
         host: hostname,
         port: port,
@@ -167,6 +173,12 @@ async function followRedirectChain(url: string, maxRedirects: number = 3): Promi
 
   for (let i = 0; i < maxRedirects; i++) {
     try {
+      // SSRF Guard: Validate each redirect hop before fetching
+      const ssrf = await validateUrlSsrf(currentUrl);
+      if (!ssrf.safe) {
+        break;
+      }
+
       const response = await fetch(currentUrl, {
         method: 'HEAD',
         redirect: 'manual',
@@ -303,6 +315,27 @@ export async function scanUrl(inputUrl: string): Promise<ScanRiskReport> {
         securityReasoning: 'Malformed URLs are frequently used in exploit payloads to crash parser logic or hide obfuscated commands.'
       }],
       details: { urlDetails: { originalUrl: inputUrl } }
+    };
+  }
+
+  // SSRF Protection: Reject private networks, loopbacks, and cloud metadata targets
+  const ssrfCheck = await validateUrlSsrf(rawUrl);
+  if (!ssrfCheck.safe) {
+    return {
+      scannerType: 'url',
+      target: inputUrl,
+      timestamp,
+      riskScore: 100,
+      riskLevel: 'CRITICAL',
+      triggeredFlags: [{
+        id: 'FLAG-SSRF-BLOCKED',
+        name: 'Server-Side Request Forgery Target Blocked',
+        severity: 'CRITICAL',
+        weight: 100,
+        description: `Target connection blocked by SSRF security policy: ${ssrfCheck.reason}`,
+        securityReasoning: 'Requests pointing to loopback, link-local, private RFC 1918 subnets, or cloud metadata endpoints are strictly forbidden.'
+      }],
+      details: { urlDetails: { originalUrl: inputUrl, ssrfBlocked: true, reason: ssrfCheck.reason } }
     };
   }
 

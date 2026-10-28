@@ -422,7 +422,7 @@ class HybridDb {
       id,
       email: cleanedEmail,
       utr: utr.trim(),
-      status: 'approved',
+      status: 'pending', // Security: payments must await server-side reconciliation or provider webhook verification
       planType: planType || 'monthly',
       submittedAt
     };
@@ -436,13 +436,25 @@ class HybridDb {
         id,
         user_email: cleanedEmail,
         utr: utr.trim(),
-        status: 'approved',
+        status: 'pending',
         plan_type: planType || 'monthly',
         submitted_at: submittedAt,
       }));
     }
 
     return newPayment;
+  }
+
+  async verifyPayment(id: string, signatureVerified: boolean): Promise<PaymentRequest | null> {
+    if (!signatureVerified) {
+      throw new Error('Payment signature verification failed. Entitlement change rejected.');
+    }
+    const payment = (this.data.payments || []).find(p => p.id === id);
+    if (!payment) return null;
+    payment.status = 'approved';
+    payment.approvedAt = new Date().toISOString();
+    this.saveLocal();
+    return payment;
   }
 
   // ----------------------------------------------------------------

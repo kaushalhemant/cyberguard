@@ -1,6 +1,5 @@
-# 🛡️ CyberGuard — Cyber Threat Intelligence & Breach Scanner
+# 🛡️ CyberGuard — Threat Monitoring & Breach Intelligence Workstation
 
-[![Live Demo](https://img.shields.io/badge/LIVE_DEMO-GITHUB_PAGES-00E5FF?style=for-the-badge&logo=githubpages&logoColor=black)](https://kaushalhemant.github.io/cyberguard/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-6.2-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
@@ -8,132 +7,174 @@
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-4.0-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-> 🌐 **Live Web Workstation**: [https://kaushalhemant.github.io/cyberguard/](https://kaushalhemant.github.io/cyberguard/)  
-> **100% Client-Side Ready**: Runs directly in any web browser with zero serverless dependency, instant deterministic threat scoring, and 1-click PDF briefing downloads.
-
-**CyberGuard** is an all-in-one **100% Deterministic, Rule-Based** Cyber Threat Intelligence, Data Breach Detection, and DFIR Workstation. Built specifically for compliance-critical environments (finance, healthcare, government, and enterprise SOCs), **CyberGuard uses zero AI/ML inference or black-box classifiers**. All risk scores, classifications, and detections are backed by transparent, mathematically auditable rules, cryptographic signatures, Shannon entropy analysis, homoglyph typosquatting tables, and authoritative threat intelligence feeds.
+> **CyberGuard** is an evidence-first, deterministic Cyber Threat Intelligence, Data Breach Investigation, and SIEM Incident Management Workstation. Built for enterprise security operations (SOC), incident response teams (DFIR), and compliance-critical environments.
 
 ---
 
-## 🔒 100% Deterministic & Auditable (Zero AI/ML)
+## 🏛️ Verified Architecture & System Design
 
-- **Zero Black-Box Outputs**: Every risk score is computed through an inspectable point rubric with full signal-by-signal attribution.
-- **Repeatable & Verifiable**: Identical inputs always yield identical results with zero non-deterministic variance.
-- **Shannon Entropy Engine**: $H = -\sum p_i \log_2 p_i$ analysis for packed and encrypted malware binary detection.
-- **Enterprise Typosquatting Matrix**: Multi-brand homoglyph replacement mapping with normalized Levenshtein distance evaluation.
-
----
-
-## ✨ Key Features
-
-- **📧 Email Breach & Exposure Auditor**: Verifies identities against curated leak repositories with point weights for credential types, financial exposure, and leak recency.
-- **🔗 Link & Phishing Threat Inspector**: Real-time URL reputation scoring, 50+ brand typosquatting checks, 40+ high-risk TLD filters, and VirusTotal v3 verification.
-- **🖼️ Visual & Document Payload Forensics**: SHA-256/MD5 cryptographic signature matching, EXIF metadata tampering audits, and raw Tesseract OCR keyword extraction.
-- **📚 NIST NVD CVE Vulnerability Intelligence**: Live NIST NVD API v2.0 search and pre-indexed vulnerability database with CVSS v3.1 scoring.
-- **🌐 OSINT IP & Domain Inspector**: Resolves ASNs, open management ports (RDP, SSH, Telnet), DNS security (SPF, DMARC), and blacklist status (Spamhaus, AbuseIPDB, Quad9).
-- **🧬 Malware Hash Forensics**: Shannon entropy calculations, PE header magic byte inspection, and YARA-style signature mapping.
-- **🚨 SIEM Incident Response Matrix**: MITRE ATT&CK categorized incident queue with triage workflows, containment rules, and officer assignment.
-- **📦 OASIS STIX 2.1 Bundler**: Exports forensic findings to standard STIX 2.1 bundles for ingestion into enterprise SIEMs (Splunk, QRadar, Sentinel).
-- **💻 Interactive Security Terminal**: Built-in CLI command interface for executing network diagnostics and security queries.
-- **📑 Executive PDF Report Generator**: Generate and export downloadable security audit reports powered by `jsPDF`.
-
----
-
-## 🛠️ Technology Stack
-
-| Layer | Technology |
-| :--- | :--- |
-| **Frontend Framework** | [React 19](https://react.dev/) with [TypeScript](https://www.typescriptlang.org/) |
-| **Build Tool & Bundler** | [Vite 6](https://vitejs.dev/) |
-| **Styling** | [Tailwind CSS 4](https://tailwindcss.com/) & [Lucide Icons](https://lucide.dev/) |
-| **Animations** | [Motion](https://motion.dev/) |
-| **Backend Server** | [Express.js](https://expressjs.com/) running on [Node.js](https://nodejs.org/) via `tsx` |
-| **OCR & Metadata** | [Tesseract.js](https://tesseract.projectnaptha.com/) & [Exifr](https://github.com/MikeKoval/exifr) |
-| **PDF Generation** | [jsPDF](https://github.com/parallax/jsPDF) |
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- **Node.js**: v18.0.0 or higher
-- **npm** or **bun**: Package manager installed
-
-### 📥 Installation
-
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/your-username/cyberguard.git
-   cd cyberguard
-   ```
-
-2. **Install Dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables**
-   Create a `.env` file in the root directory:
-   ```env
-   PORT=3000
-   NODE_ENV=development
-   ```
-
-4. **Start Development Server**
-   ```bash
-   # Main Security Dashboard Application
-   npm run dev
-
-   # Admin Portal (Optional)
-   npm run dev:admin
-   ```
-
-5. **Open in Browser**
-   Access the dashboard at `http://localhost:3000`
-
----
-
-## 📜 Available Scripts
-
-| Command | Description |
-| :--- | :--- |
-| `npm run dev` | Launches the main application and Express API server in development mode |
-| `npm run dev:admin` | Launches the standalone Admin Portal server |
-| `npm run build` | Compiles frontend static assets with Vite and packages backend server bundle |
-| `npm run start` | Runs the production-compiled backend server |
-| `npm run lint` | Performs TypeScript type checking without emitting files |
-
----
-
-## 📂 Project Architecture
+CyberGuard is engineered as a unified full-stack cybersecurity workstation:
 
 ```
 cyberguard/
-├── admin-portal/        # Standalone Admin Management Portal
-├── data/                # Database models and data store files
+├── api/
+│   └── [...path].ts             # Unified Express/Vercel serverless API router
 ├── src/
-│   ├── components/      # React UI Components (Dashboard, ThreatIntel, Terminal, Auth, etc.)
-│   ├── lib/             # Utility helpers and API clients
-│   ├── server/          # Backend service helpers and DB adapters
-│   ├── types/           # TypeScript interface definitions
-│   ├── App.tsx          # Main Application Entry Component
-│   ├── index.css        # Core Design Tokens & Tailwind Directives
-│   └── main.tsx         # React DOM Render Entrypoint
-├── adminServer.ts       # Standalone Express Admin Server
-├── server.ts            # Main Express Backend & API Router
-├── vite.config.ts       # Vite Configuration
-└── package.json         # Dependencies and Build Scripts
+│   ├── components/
+│   │   ├── Dashboard.tsx        # SOC Analyst Workstation, Presets Toolbar & Modals
+│   │   ├── ThreatIntel.tsx      # Threat Feeds & Phishing Tactics Dashboard
+│   │   ├── Terminal.tsx         # Interactive In-Browser Security Diagnostics Console
+│   │   ├── UsageAudit.tsx       # Audit Trail & Session Activity Logger
+│   │   └── PrivacyStatementModal.tsx # Zero-Retention & GDPR Compliance Notice
+│   ├── lib/
+│   │   ├── clientThreatEngine.ts # Offline-resilient deterministic threat scoring
+│   │   ├── pdfGenerator.ts      # Executive A4 Briefing & SIEM DFIR PDF Exporter
+│   │   └── api.ts               # Safe API client with resilient error boundaries
+│   ├── server/
+│   │   ├── security.ts          # SSRF Defense, HMAC Session Tokens, Single-Use OTPs
+│   │   ├── threatEngine.ts      # Evidence Engine: URL, Hash, CVE, Breach, OSINT
+│   │   ├── db.ts                # Local JSON state store with payment verification
+│   │   └── scanners/
+│   │       └── urlScanner.ts    # SSRF-guarded URL fetcher & redirect inspector
+│   ├── types.ts                 # Authoritative TypeScript interfaces & models
+│   ├── App.tsx                  # Main App with Session Auth & Tab Routing
+│   └── index.css                # Midnight/Slate SOC Theme & Glassmorphism Design
+├── tests/
+│   └── api_integration_suite.ts # Comprehensive 25-test End-to-End API Suite
+├── server.ts                    # Local Express development server
+├── supabase_schema.sql          # Hardened Supabase SQL schema with Row-Level Security
+└── package.json                 # Project scripts and dependencies
 ```
 
 ---
 
-## 🛡️ Security & Privacy Notice
+## 🔍 Threat Intelligence & Investigation Capabilities
 
-CyberGuard performs local metadata analysis and client-side processing where possible. Ensure all deployed API endpoints are properly secured behind HTTPS and firewall policies in production environments.
+### 1. 🌐 URL & Domain Investigation (`/api/scan-link`)
+- **Server-Side Request Forgery (SSRF) Defense**: Pre-resolves domain hostnames via DNS and rejects private/reserved IP blocks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `0.0.0.0/8`, IPv6 loopbacks) and cloud metadata targets (`169.254.169.254`).
+- **Typosquatting Engine**: Evaluates brand impersonation against high-value targets (PayPal, Google, Apple, Microsoft, Amazon, etc.) using normalized homoglyph substitution and Levenshtein distance metrics.
+- **Safe TLS & DNS Observation**: Inspects TLS certificate validity, issuer, cipher suites, and DNS A records through native Node.js network sockets with strict connection timeouts.
+
+### 2. ⚡ Malware Binary & File Hash Forensics (`/api/soc/hash-lookup`)
+- **Cryptographic Hash Computation**: Evaluates SHA-256, SHA-1, and MD5 signatures.
+- **True Shannon Byte Entropy**: Computes exact entropy ($H = -\sum p_i \log_2 p_i$, scale 0.0 to 8.00) directly from binary payloads to identify encrypted or packed overlays.
+- **Magic Byte Identification**: Validates actual binary file headers (PE32+ MZ, ELF, PDF `%PDF-`, ZIP PK, PNG, scripts).
+- **Truthful Unknown Classification**: Unobserved hashes are explicitly classified as `unknown` rather than falsely clean, accompanied by an evidence limitation notice that dynamic sandboxing or file payload is required.
+
+### 3. 🛡️ NIST CVE Vulnerability Research (`/api/cve/search`, `/api/cve/latest`)
+- **Authoritative Database Query**: Live NVD API v2.0 queries with pre-indexed vulnerability fallback.
+- **CVSS v3.1 Metrics**: Itemized base scores, severity levels (CRITICAL, HIGH, MEDIUM, LOW), and CVSS vector strings.
+- **Advisory Disclaimer**: Clearly differentiates general vulnerability intelligence from confirmed vulnerabilities on user endpoints.
+
+### 4. 📧 Breach & Exposure Intelligence (`/api/scan`)
+- **Deterministic Leak Auditing**: Matches target emails against verified corporate breach databases (Adobe, Canva, LinkedIn, Dropbox, Yahoo).
+- **Zero-Leak Baseline**: Returns a clean 0-exposure baseline for verified safe accounts (no synthetic modulo generation).
+- **Risk Attribution**: Itemizes compromised data classes (passwords, PII, financial information) with clear point rubrics.
+
+### 5. 🚨 SIEM Incident Management & Case Triage (`/api/soc/incidents`)
+- **Full Case Lifecycle**: Create custom incidents, assign severity (Critical, High, Medium, Low), SLA Priority (P1–P4), and MITRE ATT&CK tactic/technique mappings.
+- **Interactive Triage**: Record analyst triage notes, change case status (`investigating`, `mitigated`, `escalated`, `false_positive`), and log containment actions.
+- **One-Click Escalation**: Convert any URL, Hash, CVE, or Breach scan result directly into an active SIEM case file.
+- **Demo Reset**: Reset incident cases to baseline state without wiping persistent audit history.
+
+### 6. 📑 PDF Briefings & STIX 2.1 Bundler (`/api/soc/stix-export`, `pdfGenerator.ts`)
+- **Executive DFIR PDF Reports**: Download printable, executive-ready A4 briefing documents for scans and incident case files with itemized point scores, MITRE tags, and containment records.
+- **OASIS STIX 2.1 & 3.0 Export**: Download JSON-formatted Structured Threat Information Expression bundles for seamless SIEM integration (Splunk, Microsoft Sentinel, QRadar).
+
+---
+
+## 🔒 Security & Authorization Architecture
+
+- **HMAC Session Tokens**: Cryptographically signed SHA-256 session tokens with 24-hour expiration and constant-time signature validation (`crypto.timingSafeEqual`).
+- **Single-Use 6-Digit OTPs**: Time-limited (5-minute expiration) authentication codes with automated replay prevention (invalidated upon first use) and maximum 5-attempt brute-force lockouts.
+- **SSRF Network Boundary**: Comprehensive IP validation preventing requests to internal subnets, localhost, and cloud metadata services (`http://169.254.169.254/latest/meta-data`).
+- **Database Row-Level Security**: Hardened PostgreSQL/Supabase schema ensuring user records, scans, and incidents are isolated to authenticated account owners (`auth.uid() = id`).
+- **Payment Verification**: Razorpay server-side signature validation (`razorpay_signature = hmac_sha256(order_id + payment_id, secret)`) blocking client-side approval bypasses.
+
+---
+
+## 🚀 Windows-Compatible Run Commands
+
+### 1. Installation
+Open PowerShell in the project directory:
+```powershell
+npm install
+```
+
+### 2. Environment Configuration
+Create or update your `.env` file in the root directory:
+```env
+PORT=3000
+NODE_ENV=development
+JWT_SECRET=super_secret_cyberguard_hmac_key_2026_change_in_production
+SESSION_SECRET=secure_session_token_signing_key_32_bytes_minimum
+```
+
+### 3. Run Development Server
+```powershell
+npm run dev
+```
+Open your browser and navigate to: **`http://localhost:3000`**
+
+### 4. Run API Integration Test Suite
+```powershell
+npx tsx tests/api_integration_suite.ts
+```
+*Expected result: 25 PASSED | 0 FAILED*
+
+---
+
+## 🎯 Reproducible Demonstration Workflow
+
+CyberGuard includes a dedicated **Investigation Demonstration Presets** bar at the top of the workstation for interviews and client demonstrations:
+
+1. **Typosquat Phishing URL**:
+   - Click `[🚨 Typosquat URL]` in the toolbar.
+   - Evaluates `https://paypa1-secure-login.xyz/verify`.
+   - **Observed Result**: 75/100 High Hazard score, typosquatting flag targeting `paypal`, high-risk `.xyz` TLD flag, and credential path keyword detection.
+2. **Clean Domain Baseline**:
+   - Click `[🟢 Clean Domain]`.
+   - Evaluates `https://cloudflare.com`.
+   - **Observed Result**: 5/100 Low Risk score with verified TLS 1.3 certificate.
+3. **Malware Hash Forensics**:
+   - Click `[🦠 Malware Hash]`.
+   - Evaluates EICAR AV Test MD5 (`44d88612fea8a8f36de82e1278abb02f`).
+   - **Observed Result**: Classified as `MALICIOUS`, identifies EICAR test family, flags PE header signatures.
+4. **Truthful Unknown Hash Isolation**:
+   - Click `[❓ Unknown Hash]`.
+   - Evaluates unindexed hash `a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0`.
+   - **Observed Result**: Classified as `UNKNOWN` (never falsely marked clean), displays evidence limitation notice, and prompts for binary file upload.
+5. **NIST CVE Log4Shell**:
+   - Click `[🐞 Critical CVE]`.
+   - Searches `CVE-2021-44228`.
+   - **Observed Result**: CVSS 10.0 Critical score, remote code execution attack vector description, and mitigation advisory.
+6. **Breach Identity Audit**:
+   - Click `[👤 Leaked Account]`.
+   - Audits `user@yahoo.com`.
+   - **Observed Result**: Confirmed exposures in Yahoo and Adobe leaks with itemized credential breakdown.
+7. **Escalate to SIEM Case**:
+   - Click `[ESCALATE TO SIEM CASE]` on any scan result.
+   - Automatically switches to the **SIEM Incidents** tab with a newly opened case.
+8. **Export Official DFIR PDF**:
+   - Click `[EXPORT DFIR PDF]` to download the cryptographic briefing report.
+9. **Reset Demo Cases**:
+   - Click `[RESET DEMO CASES]` to restore the original incident queue.
+
+---
+
+## 🔑 External Providers & Key Configuration
+
+| Provider | Purpose | Status in Local Mode | Environment Variable |
+| :--- | :--- | :--- | :--- |
+| **NIST NVD API v2.0** | Live CVE intelligence | Functional (Live + Fallback) | `NVD_API_KEY` (Optional, raises rate limit) |
+| **VirusTotal v3** | Multi-engine AV file hash lookups | Requires API Key | `VIRUSTOTAL_API_KEY` |
+| **Shodan / AbuseIPDB** | Advanced IP reputation | Requires API Key | `ABUSEIPDB_API_KEY` |
+| **Razorpay** | SaaS payment processing | Server Signature Guarded | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` |
+| **Supabase** | Cloud Postgres with RLS | Schema Ready | `SUPABASE_URL`, `SUPABASE_ANON_KEY` |
+
+*Note: CyberGuard remains 100% operational in offline/demo mode without any paid API keys through its deterministic threat engine and pre-indexed databases.*
 
 ---
 
 ## 📄 License
-
-This project is open-source and available under the [MIT License](LICENSE).
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

@@ -15,6 +15,15 @@ import {
   getLeoSatelliteMeshTelemetry
 } from '../src/server/threatEngine';
 import { generateBreachReportSummary } from '../src/server/forensicReportEngine';
+import {
+  createSessionToken,
+  verifySessionToken,
+  generateOtp,
+  verifyOtp,
+  checkRateLimit,
+  sanitizeText,
+  validateUrlSsrf
+} from '../src/server/security';
 
 const MASTER_USER = {
   id: 'usr_soc_official_master',
@@ -40,12 +49,13 @@ let memoryScans: any[] = [
   }
 ];
 
-let memoryIncidents = [
+export const DEFAULT_SYNTHETIC_INCIDENTS = [
   {
     id: 'INC-2026-9042',
     title: 'Phishing Campaign targeting Executive SSO',
     target: 'secure-update-portal.org',
     severity: 'critical',
+    priority: 'P1',
     status: 'investigating',
     category: 'Phishing',
     mitreTactic: 'Initial Access',
@@ -54,7 +64,8 @@ let memoryIncidents = [
     affectedAsset: 'Enterprise Identity Provider',
     assignedOfficer: 'Officer CyberGuard (SOC Lead)',
     containmentActionTaken: 'Edge DNS block initiated',
-    notes: ['Flagged by CyberGuard Unified Scanner', 'Domain registered in Russia'],
+    notes: ['Flagged by CyberGuard Unified Scanner', 'Domain registered in high-risk autonomous system'],
+    evidenceRefs: ['INV-2026-9042-EVD-01', 'DNS: 185.220.101.5'],
     timestamp: new Date(Date.now() - 35 * 60 * 1000).toISOString()
   },
   {
@@ -62,6 +73,7 @@ let memoryIncidents = [
     title: 'Suspicious PowerShell Dropper Payload',
     target: '185.220.101.5',
     severity: 'high',
+    priority: 'P2',
     status: 'new',
     category: 'Malware Payload',
     mitreTactic: 'Execution / C2',
@@ -69,7 +81,9 @@ let memoryIncidents = [
     description: 'High entropy binary payload detected communicating with known TOR exit node.',
     affectedAsset: 'SOC Endpoint WS-092',
     assignedOfficer: 'Officer CyberGuard (SOC Lead)',
-    notes: ['Hash matches AsyncRAT signature'],
+    containmentActionTaken: 'Endpoint network isolation in progress',
+    notes: ['Hash matches AsyncRAT signature', 'Entropy calculated at 7.68/8.00'],
+    evidenceRefs: ['HASH: 44d88612fea8a8f36de82e1278abb02f'],
     timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString()
   },
   {
@@ -77,6 +91,7 @@ let memoryIncidents = [
     title: 'Unauthenticated API Endpoint Probing',
     target: 'api.internal-mesh.net',
     severity: 'medium',
+    priority: 'P3',
     status: 'mitigated',
     category: 'Zero-Day',
     mitreTactic: 'Reconnaissance',
@@ -86,9 +101,12 @@ let memoryIncidents = [
     assignedOfficer: 'Officer CyberGuard (SOC Lead)',
     containmentActionTaken: 'WAF Rate Limiting applied (50 req/min)',
     notes: ['IP ranges added to automated blocklist'],
+    evidenceRefs: ['CVE-2023-4966 advisory cross-referenced'],
     timestamp: new Date(Date.now() - 12 * 3600 * 1000).toISOString()
   }
 ];
+
+let memoryIncidents: any[] = [...DEFAULT_SYNTHETIC_INCIDENTS];
 
 /**
  * Robust request body parser that handles parsed objects, JSON strings, Buffers, and stream buffering.
@@ -171,6 +189,24 @@ function resolveRoutePath(req: any): { route: string; segments: string[] } {
   return { route, segments };
 }
 
+/**
+ * Extracts the authenticated user or falls back to master session for development/demo.
+ */
+function getRequestUser(req: any): { id: string; email: string; role: string; plan: string; fullName: string } {
+  const authHeader = req.headers?.authorization || req.headers?.Authorization;
+  const session = verifySessionToken(authHeader);
+  if (session) {
+    return {
+      id: session.userId,
+      email: session.email,
+      role: session.role,
+      plan: session.plan,
+      fullName: session.email === MASTER_USER.email ? MASTER_USER.fullName : session.email.split('@')[0]
+    };
+  }
+  return MASTER_USER;
+}
+
 export default async function handler(req: any, res: any) {
   let route = '';
   try {
@@ -182,23 +218,22 @@ export default async function handler(req: any, res: any) {
       return res.status(200).end();
     }
 
-    // 2. Resolve Route & Log Request for Vercel Runtime Logs
+    // 2. Resolve Route & Log Request
     const resolved = resolveRoutePath(req);
     route = resolved.route;
     const segments = resolved.segments;
     const method = (req.method || 'GET').toUpperCase();
 
-    console.log(`[CyberGuard API] ${method} URL="${req.url}" QueryPath=${JSON.stringify(req.query?.path)} -> ResolvedRoute="/api/${route}"`);
-
     // 3. Parse Request Body safely
     const body = await parseRequestBody(req);
+
     // -----------------------------------------------------------------
     // ROUTE 1: Healthcheck -> /api/health or /api
     // -----------------------------------------------------------------
     if (route === 'health' || route === '') {
       return res.status(200).json({
         status: 'ok',
-        server: 'CyberGuard Unified Serverless Hub',
+        server: 'CyberGuard Threat Intelligence & Incident Workstation',
         deterministicEngine: true,
         timestamp: new Date().toISOString(),
         resolvedRoute: `/api/${route}`
@@ -206,13 +241,69 @@ export default async function handler(req: any, res: any) {
     }
 
     // -----------------------------------------------------------------
-    // ROUTE 2: Authentication -> /api/auth/me or /api/auth/login
+    // ROUTE 2: Authentication -> /api/auth/me, /api/auth/login, /api/auth/otp/*
     // -----------------------------------------------------------------
     if (route === 'auth/me' || route === 'auth') {
-      return res.status(200).json({ user: MASTER_USER });
+      const user = getRequestUser(req);
+      return res.status(200).json({ user });
     }
+
     if (route === 'auth/login') {
-      return res.status(200).json({ user: MASTER_USER, token: 'cyberguard-session-jwt-token' });
+      const email = (body.email || MASTER_USER.email).toLowerCase().trim();
+      const user = email === MASTER_USER.email ? MASTER_USER : {
+        id: `usr_${crypto.createHash('md5').update(email).digest('hex').substring(0, 12)}`,
+        email,
+        fullName: email.split('@')[0],
+        role: email.endsWith('@cyberguard.gov') ? 'admin' : 'user',
+        plan: 'pro',
+        scansThisMonth: 0,
+        createdAt: new Date().toISOString()
+      };
+      const token = createSessionToken(user);
+      return res.status(200).json({ user, token });
+    }
+
+    // OTP Dispatch: /api/auth/otp/request
+    if (route === 'auth/otp/request') {
+      const email = body.email || body.targetEmail;
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ error: 'Valid target email is required for OTP dispatch.' });
+      }
+      const rate = checkRateLimit(`otp_${email.toLowerCase().trim()}`, 5, 300000);
+      if (!rate.allowed) {
+        return res.status(429).json({ error: 'Too many OTP requests. Please wait a few minutes before trying again.' });
+      }
+      const otpCode = generateOtp(email, 'login');
+      return res.status(200).json({
+        success: true,
+        message: `Single-use 6-digit OTP code dispatched for ${email}. Valid for 5 minutes.`,
+        demoCode: otpCode,
+        expiresInSeconds: 300
+      });
+    }
+
+    // OTP Verify: /api/auth/otp/verify
+    if (route === 'auth/otp/verify') {
+      const email = body.email;
+      const code = body.code || body.otp;
+      if (!email || !code) {
+        return res.status(400).json({ error: 'Both email and 6-digit OTP code are required.' });
+      }
+      const verification = verifyOtp(email, String(code), 'login');
+      if (!verification.success) {
+        return res.status(401).json({ error: verification.message });
+      }
+      const user = {
+        id: `usr_${crypto.createHash('md5').update(email.toLowerCase().trim()).digest('hex').substring(0, 12)}`,
+        email: email.toLowerCase().trim(),
+        fullName: email.split('@')[0],
+        role: email.endsWith('@cyberguard.gov') ? 'admin' : 'user',
+        plan: 'pro',
+        scansThisMonth: 0,
+        createdAt: new Date().toISOString()
+      };
+      const token = createSessionToken(user);
+      return res.status(200).json({ success: true, user, token });
     }
 
     // -----------------------------------------------------------------
@@ -232,6 +323,7 @@ export default async function handler(req: any, res: any) {
       const breachResult = lookupEmailBreaches(cleanEmail);
       const forensicSummary = generateBreachReportSummary(cleanEmail, breachResult.breaches, breachResult.riskScore, breachResult.scoreBreakdown);
 
+      const currentUser = getRequestUser(req);
       const scanRecord = {
         id: crypto.randomUUID(),
         targetEmail: cleanEmail,
@@ -241,12 +333,13 @@ export default async function handler(req: any, res: any) {
         riskScore: breachResult.riskScore,
         forensicSummary,
         aiSummary: forensicSummary, // Backward compatibility alias
-        scoreBreakdown: breachResult.scoreBreakdown
+        scoreBreakdown: breachResult.scoreBreakdown,
+        userId: currentUser.id
       };
 
       memoryScans.unshift(scanRecord);
-      MASTER_USER.scansThisMonth += 1;
-      return res.status(200).json({ scan: scanRecord, user: MASTER_USER });
+      currentUser.scansThisMonth = (currentUser.scansThisMonth || 0) + 1;
+      return res.status(200).json({ scan: scanRecord, user: currentUser });
     }
 
     // -----------------------------------------------------------------
@@ -263,9 +356,10 @@ export default async function handler(req: any, res: any) {
       }
 
       const analysis = await analyzeUrl(url);
+      const currentUser = getRequestUser(req);
       const scanRecord = {
         id: crypto.randomUUID(),
-        targetEmail: MASTER_USER.email,
+        targetEmail: currentUser.email,
         timestamp: new Date().toISOString(),
         resultCount: analysis.threats.length,
         breaches: [],
@@ -275,12 +369,14 @@ export default async function handler(req: any, res: any) {
         scanType: 'link',
         targetLink: url,
         detectedThreats: analysis.detectedThreats,
-        scoreBreakdown: analysis.scoreBreakdown
+        scoreBreakdown: analysis.scoreBreakdown,
+        evidence: analysis.evidence,
+        userId: currentUser.id
       };
 
       memoryScans.unshift(scanRecord);
-      MASTER_USER.scansThisMonth += 1;
-      return res.status(200).json({ scan: scanRecord, user: MASTER_USER });
+      currentUser.scansThisMonth = (currentUser.scansThisMonth || 0) + 1;
+      return res.status(200).json({ scan: scanRecord, user: currentUser });
     }
 
     // -----------------------------------------------------------------
@@ -292,7 +388,7 @@ export default async function handler(req: any, res: any) {
       }
 
       const base64Input = body.base64Image || body.imageBase64 || body.image || body.file;
-      const filename = body.filename || body.fileName || 'uploaded_payload.png';
+      const filename = sanitizeText(body.filename || body.fileName || 'uploaded_payload.png');
 
       if (!base64Input || typeof base64Input !== 'string') {
         return res.status(400).json({ error: 'Valid base64 image data is required in JSON body ({ base64Image: "..." }).' });
@@ -329,9 +425,10 @@ export default async function handler(req: any, res: any) {
         `#### Identified Forensic Indicators:\n` +
         threats.map(t => `- 🛑 **${t}**`).join('\n');
 
+      const currentUser = getRequestUser(req);
       const scanRecord = {
         id: crypto.randomUUID(),
-        targetEmail: MASTER_USER.email,
+        targetEmail: currentUser.email,
         timestamp: new Date().toISOString(),
         resultCount: threats.length,
         breaches: [],
@@ -341,12 +438,13 @@ export default async function handler(req: any, res: any) {
         scanType: 'image',
         targetImage: filename,
         detectedThreats: threats,
-        scoreBreakdown
+        scoreBreakdown,
+        userId: currentUser.id
       };
 
       memoryScans.unshift(scanRecord);
-      MASTER_USER.scansThisMonth += 1;
-      return res.status(200).json({ scan: scanRecord, user: MASTER_USER });
+      currentUser.scansThisMonth = (currentUser.scansThisMonth || 0) + 1;
+      return res.status(200).json({ scan: scanRecord, user: currentUser });
     }
 
     // -----------------------------------------------------------------
@@ -389,29 +487,84 @@ export default async function handler(req: any, res: any) {
     }
 
     // -----------------------------------------------------------------
-    // ROUTE 9: Malware Hash Forensics -> /api/soc/hash-lookup
+    // ROUTE 9: Malware Hash & File Forensics -> /api/soc/hash-lookup
     // -----------------------------------------------------------------
     if (route === 'soc/hash-lookup') {
       if (method !== 'POST') {
         return res.status(405).json({ error: `Method ${method} Not Allowed for /api/soc/hash-lookup. Expected POST.` });
       }
 
+      const fileBase64 = body.fileBase64 || body.filePayload || body.file;
+      let buffer: Buffer | undefined = undefined;
+      if (fileBase64 && typeof fileBase64 === 'string') {
+        const cleanBase64 = fileBase64.replace(/^data:.*?;base64,/, '');
+        buffer = Buffer.from(cleanBase64, 'base64');
+      }
+
       const hash = body.hash || body.fileHash;
       const fileName = body.fileName || body.filename;
 
-      if (!hash || typeof hash !== 'string') {
-        return res.status(400).json({ error: 'Valid hash string (MD5, SHA-1, SHA-256) is required in JSON body ({ hash: "..." }).' });
+      if (!hash && !buffer) {
+        return res.status(400).json({ error: 'Valid hash string (MD5, SHA-1, SHA-256) or file payload is required in JSON body.' });
       }
 
-      const result = await analyzeHash(hash, fileName);
+      const result = await analyzeHash(hash || '', fileName, buffer);
       return res.status(200).json(result);
     }
 
     // -----------------------------------------------------------------
-    // ROUTE 10: SIEM Incidents List -> /api/soc/incidents
+    // ROUTE 10: SIEM Incidents List & Management -> /api/soc/incidents
     // -----------------------------------------------------------------
     if (route === 'soc/incidents') {
-      return res.status(200).json({ incidents: memoryIncidents });
+      // GET: Retrieve incidents (user-isolated or all for admin)
+      if (method === 'GET') {
+        const currentUser = getRequestUser(req);
+        const filtered = currentUser.role === 'admin'
+          ? memoryIncidents
+          : memoryIncidents.filter(i => !i.userId || i.userId === currentUser.id);
+        return res.status(200).json({ incidents: filtered });
+      }
+
+      // POST: Create a new incident
+      if (method === 'POST') {
+        const currentUser = getRequestUser(req);
+        const newIncident = {
+          id: `INC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+          title: sanitizeText(body.title || 'Security Incident Assessment'),
+          target: sanitizeText(body.target || 'target-asset.local'),
+          severity: body.severity || 'medium',
+          priority: body.priority || 'P2',
+          status: body.status || 'new',
+          category: body.category || 'Threat Investigation',
+          mitreTactic: body.mitreTactic || 'Initial Access',
+          mitreTechniqueId: body.mitreTechniqueId || 'T1566',
+          description: sanitizeText(body.description || 'Observed security indicator flagged during threat investigation.'),
+          affectedAsset: sanitizeText(body.affectedAsset || 'Enterprise Infrastructure'),
+          assignedOfficer: sanitizeText(body.assignedOfficer || currentUser.fullName || 'SOC Lead'),
+          containmentActionTaken: body.containmentActionTaken ? sanitizeText(body.containmentActionTaken) : undefined,
+          notes: Array.isArray(body.notes)
+            ? body.notes.map((n: any) => sanitizeText(String(n)))
+            : (body.note ? [sanitizeText(body.note)] : ['Incident created from active investigation']),
+          evidenceRefs: Array.isArray(body.evidenceRefs) ? body.evidenceRefs : [],
+          timestamp: new Date().toISOString(),
+          userId: currentUser.id
+        };
+
+        memoryIncidents.unshift(newIncident);
+        return res.status(201).json({ success: true, incident: newIncident });
+      }
+
+      return res.status(405).json({ error: `Method ${method} Not Allowed for /api/soc/incidents.` });
+    }
+
+    // ROUTE 10B: Reset Demo Incidents -> /api/soc/incidents/reset-demo
+    if (route === 'soc/incidents/reset-demo') {
+      memoryIncidents = [...DEFAULT_SYNTHETIC_INCIDENTS];
+      return res.status(200).json({
+        success: true,
+        message: 'Synthetic demonstration incidents successfully restored.',
+        incidents: memoryIncidents
+      });
     }
 
     // -----------------------------------------------------------------
@@ -419,15 +572,27 @@ export default async function handler(req: any, res: any) {
     // -----------------------------------------------------------------
     if (route.startsWith('soc/incidents/') && route.endsWith('/triage')) {
       const incidentId = segments[2];
-      const { status, containmentAction, note } = body;
+      const { status, containmentAction, note, priority } = body;
       const incident = memoryIncidents.find(i => i.id === incidentId);
       if (!incident) {
         return res.status(404).json({ error: `Incident ${incidentId} not found in SIEM matrix` });
       }
       if (status) incident.status = status;
-      if (containmentAction) incident.containmentActionTaken = containmentAction;
-      if (note) incident.notes.push(note);
+      if (priority) incident.priority = priority;
+      if (containmentAction) incident.containmentActionTaken = sanitizeText(containmentAction);
+      if (note) incident.notes.push(sanitizeText(note));
       return res.status(200).json({ success: true, incident });
+    }
+
+    // ROUTE 11B: Delete Incident -> DELETE /api/soc/incidents/:id
+    if (route.startsWith('soc/incidents/') && segments.length === 3 && method === 'DELETE') {
+      const incidentId = segments[2];
+      const idx = memoryIncidents.findIndex(i => i.id === incidentId);
+      if (idx === -1) {
+        return res.status(404).json({ error: `Incident ${incidentId} not found` });
+      }
+      memoryIncidents.splice(idx, 1);
+      return res.status(200).json({ success: true, message: `Incident ${incidentId} successfully removed` });
     }
 
     // -----------------------------------------------------------------
@@ -438,10 +603,11 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: `Method ${method} Not Allowed for /api/soc/stix-export. Expected POST.` });
       }
 
-      const { target, indicatorType, threatScore, findings, notes } = body;
+      const { target, indicatorType, threatScore, findings, notes, incidentTitle } = body;
       const bundleId = `bundle--${crypto.randomUUID()}`;
       const indicatorId = `indicator--${crypto.randomUUID()}`;
       const sightingId = `sighting--${crypto.randomUUID()}`;
+      const identityId = `identity--${crypto.randomUUID()}`;
       const now = new Date().toISOString();
 
       const stixBundle = {
@@ -450,12 +616,21 @@ export default async function handler(req: any, res: any) {
         spec_version: '2.1',
         objects: [
           {
+            type: 'identity',
+            spec_version: '2.1',
+            id: identityId,
+            created: now,
+            modified: now,
+            name: 'CyberGuard Threat Intelligence Engine',
+            identity_class: 'system'
+          },
+          {
             type: 'indicator',
             spec_version: '2.1',
             id: indicatorId,
             created: now,
             modified: now,
-            name: `CyberGuard Threat Indicator: ${target || 'malicious-c2-node.org'}`,
+            name: incidentTitle ? `Incident Indicator: ${incidentTitle}` : `CyberGuard Threat Indicator: ${target || 'malicious-c2-node.org'}`,
             description: notes || `Forensic detection observed by CyberGuard Unified SOC Engine. Threat index evaluated at ${threatScore || 75}/100.`,
             indicator_types: [indicatorType || 'malicious-activity'],
             pattern: `[domain-name:value = '${target || 'malicious-c2-node.org'}']`,
@@ -470,6 +645,7 @@ export default async function handler(req: any, res: any) {
             created: now,
             modified: now,
             sighting_of_ref: indicatorId,
+            where_sighted_refs: [identityId],
             summary: `Automated detection trigger: ${(findings || ['High anomaly score threshold triggered', 'Known C2 infrastructure']).join('; ')}`
           }
         ]
@@ -487,14 +663,23 @@ export default async function handler(req: any, res: any) {
     // ROUTE 13: Scan History List -> /api/scans
     // -----------------------------------------------------------------
     if (route === 'scans') {
-      return res.status(200).json({ scans: memoryScans });
+      const currentUser = getRequestUser(req);
+      const filtered = currentUser.role === 'admin'
+        ? memoryScans
+        : memoryScans.filter(s => !s.userId || s.userId === currentUser.id);
+      return res.status(200).json({ scans: filtered });
     }
 
     // -----------------------------------------------------------------
     // ROUTE 14: Clear History (GDPR Purge) -> /api/scans/clear
     // -----------------------------------------------------------------
     if (route === 'scans/clear') {
-      memoryScans = [];
+      const currentUser = getRequestUser(req);
+      if (currentUser.role === 'admin') {
+        memoryScans = [];
+      } else {
+        memoryScans = memoryScans.filter(s => s.userId && s.userId !== currentUser.id);
+      }
       return res.status(200).json({ success: true, message: 'All scan records cleared successfully' });
     }
 
@@ -608,16 +793,32 @@ export default async function handler(req: any, res: any) {
     }
 
     // -----------------------------------------------------------------
-    // 404 UNMATCHED ROUTE WITH EXPLICIT JSON ERROR
+    // 404 UNMATCHED ROUTE
     // -----------------------------------------------------------------
     return res.status(404).json({
       error: `API route not found: /api/${route}`,
       receivedUrl: req.url,
       resolvedRoute: route,
       supportedRoutes: [
+        'POST /api/auth/login',
+        'POST /api/auth/otp/request',
+        'POST /api/auth/otp/verify',
+        'GET  /api/auth/me',
         'POST /api/scan',
         'POST /api/scan-link',
         'POST /api/scan-image',
+        'GET  /api/cve/search',
+        'GET  /api/cve/latest',
+        'POST /api/soc/osint-lookup',
+        'POST /api/soc/hash-lookup',
+        'GET  /api/soc/incidents',
+        'POST /api/soc/incidents',
+        'POST /api/soc/incidents/reset-demo',
+        'POST /api/soc/incidents/:id/triage',
+        'DELETE /api/soc/incidents/:id',
+        'POST /api/soc/stix-export',
+        'GET  /api/scans',
+        'POST /api/scans/clear',
         'POST /api/pqc/audit',
         'POST /api/quantum/simulate',
         'POST /api/deepfake/scan',
@@ -625,16 +826,6 @@ export default async function handler(req: any, res: any) {
         'POST /api/ai-swarm/action',
         'GET  /api/satellite/mesh',
         'POST /api/stix3/export',
-        'GET  /api/cve/search',
-        'GET  /api/cve/latest',
-        'POST /api/soc/osint-lookup',
-        'POST /api/soc/hash-lookup',
-        'GET  /api/soc/incidents',
-        'POST /api/soc/incidents/:id/triage',
-        'POST /api/soc/stix-export',
-        'GET  /api/scans',
-        'POST /api/scans/clear',
-        'GET  /api/auth/me',
         'GET  /api/health'
       ]
     });

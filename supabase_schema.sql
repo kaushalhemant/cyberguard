@@ -67,18 +67,43 @@ CREATE TABLE IF NOT EXISTS public.system_logs (
   timestamp TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Enable Row Level Security (RLS) & Public access policies
+-- Enable Row Level Security (RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public read users" ON public.users FOR SELECT USING (true);
-CREATE POLICY "Allow public insert users" ON public.users FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update users" ON public.users FOR UPDATE USING (true);
+-- 1. Users Policies: Users can only read and update their own profile
+CREATE POLICY "Users can read own profile" ON public.users 
+  FOR SELECT TO authenticated 
+  USING (auth.uid() = id);
 
-CREATE POLICY "Allow public read scans" ON public.scans FOR SELECT USING (true);
-CREATE POLICY "Allow public insert scans" ON public.scans FOR INSERT WITH CHECK (true);
+CREATE POLICY "Users can update own profile" ON public.users 
+  FOR UPDATE TO authenticated 
+  USING (auth.uid() = id);
 
-CREATE POLICY "Allow public read activity_logs" ON public.activity_logs FOR SELECT USING (true);
-CREATE POLICY "Allow public insert activity_logs" ON public.activity_logs FOR INSERT WITH CHECK (true);
+-- 2. Scans Policies: Users can only access their own investigations
+CREATE POLICY "Users can read own scans" ON public.scans 
+  FOR SELECT TO authenticated 
+  USING (target_email = auth.jwt() ->> 'email');
+
+CREATE POLICY "Users can insert own scans" ON public.scans 
+  FOR INSERT TO authenticated 
+  WITH CHECK (target_email = auth.jwt() ->> 'email');
+
+-- 3. Payments Policies: Users can view own payments
+CREATE POLICY "Users can read own payments" ON public.payments 
+  FOR SELECT TO authenticated 
+  USING (email = auth.jwt() ->> 'email');
+
+-- 4. Activity Logs: Users can view own activity audit
+CREATE POLICY "Users can read own activity logs" ON public.activity_logs 
+  FOR SELECT TO authenticated 
+  USING (user_email = auth.jwt() ->> 'email');
+
+-- 5. Service Role: Full administrative access for trusted backend server
+CREATE POLICY "Service Role Full Access Users" ON public.users FOR ALL TO service_role USING (true);
+CREATE POLICY "Service Role Full Access Scans" ON public.scans FOR ALL TO service_role USING (true);
+CREATE POLICY "Service Role Full Access Payments" ON public.payments FOR ALL TO service_role USING (true);
+CREATE POLICY "Service Role Full Access Logs" ON public.activity_logs FOR ALL TO service_role USING (true);
+

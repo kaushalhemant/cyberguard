@@ -480,38 +480,52 @@ export function clientAnalyzeOsint(target: string): OsintResult {
 // 6. CLIENT MALWARE HASH FORENSICS
 export function clientAnalyzeHash(hash: string, fileName?: string): HashAnalysisResult {
   const clean = hash.trim().toLowerCase();
-  const isMalicious = clean === '44d88612fea8a8f36de82e1278abb02f' || clean.startsWith('44d') || clean.length === 32;
+  
+  const KNOWN_MALICIOUS: Record<string, { family: string; desc: string }> = {
+    '44d88612fea8a8f36de82e1278abb02f': { family: 'EICAR Standard AV Test String', desc: 'Standard EICAR Anti-Virus test binary signature' },
+    '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f': { family: 'EICAR Test Payload (SHA-256)', desc: 'Standard EICAR test string' },
+    'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855': { family: 'Zero-byte Empty Payload', desc: 'SHA-256 of empty file' },
+    '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8': { family: 'Known Test Hash', desc: 'SHA-256 of test string "password"' }
+  };
 
-  const yaraRules = isMalicious 
-    ? ['MALW_EICAR_TEST_FILE_SIGNATURE__MD5_', 'SUSP_PE_Packed_HighEntropy']
-    : ['CLEAN_BASELINE_FILE_STRUCTURE'];
+  const isEicarMd5 = clean === '44d88612fea8a8f36de82e1278abb02f';
+  const isEicarSha256 = clean === '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f';
+  const isMalicious = isEicarMd5 || isEicarSha256 || clean.includes('lockbit') || clean.includes('wannacry');
+  const isKnownClean = clean === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+  const classification: 'clean' | 'suspicious' | 'malicious' | 'unknown' = 
+    isMalicious ? 'malicious' : isKnownClean ? 'clean' : 'unknown';
+
+  const hashType = clean.length === 32 ? 'MD5' : clean.length === 40 ? 'SHA-1' : clean.length === 64 ? 'SHA-256' : 'UNKNOWN';
 
   const scoreBreakdown = isMalicious
-    ? [
-        { rule: 'Known Malicious Threat Hash Signature Match', points: 95 }
-      ]
-    : [
-        { rule: 'Clean Baseline Hash Signature Verification', points: 0 }
-      ];
+    ? [{ rule: 'Known Malicious Threat Hash Signature Match', points: 95 }]
+    : isKnownClean
+    ? [{ rule: 'Known Standard Reference Hash (Zero Payload)', points: 0 }]
+    : [{ rule: 'Unindexed Hash — Requires Dynamic Sandbox / Binary Upload', points: 20 }];
 
   return {
     hash: clean,
-    hashType: clean.length === 32 ? 'MD5' : clean.length === 40 ? 'SHA-1' : 'SHA-256',
-    fileName: fileName || (isMalicious ? 'AsyncRAT_Trojan_dropper.exe' : 'clean_document.pdf'),
-    fileSizeBytes: isMalicious ? 1048576 : 65536,
-    detectedFormat: isMalicious ? 'Win32 Executable (PE32+ GUI / DLL Payload)' : 'Document Artifact (PDF / Clean Asset)',
-    magicBytes: isMalicious ? '4D 5A 90 00 03 00 00 00 (MZ Executable Header)' : '25 50 44 46 2D 31 2E 37 (%PDF-1.7)',
-    entropyScore: isMalicious ? 7.68 : 3.82,
-    isPackedOrEncrypted: isMalicious,
-    malwareClassification: isMalicious ? 'malicious' : 'clean',
-    threatFamily: isMalicious ? 'AsyncRAT Trojan' : undefined,
-    matchedYaraRules: yaraRules,
+    hashType: hashType as any,
+    fileName: fileName || (isMalicious ? 'eicar_test_binary.com' : isKnownClean ? 'empty_sample.bin' : 'unidentified_sample.bin'),
+    fileSizeBytes: isMalicious ? 68 : isKnownClean ? 0 : 0,
+    detectedFormat: isMalicious ? 'DOS Executable / EICAR Test Signature' : isKnownClean ? 'Zero-byte File' : 'Binary Payload (Awaiting Upload)',
+    magicBytes: isMalicious ? '58 35 4F 21 50 25 40 41 (X5O!P%@A - EICAR Header)' : isKnownClean ? '00' : 'N/A (Raw hash lookup without file payload)',
+    entropyScore: isMalicious ? 5.12 : isKnownClean ? 0.0 : 0.0,
+    isPackedOrEncrypted: false,
+    malwareClassification: classification,
+    threatFamily: isMalicious ? (KNOWN_MALICIOUS[clean]?.family || 'Trojan/TestSignature') : undefined,
+    matchedYaraRules: isMalicious ? ['MALW_EICAR_TEST_FILE_SIGNATURE'] : [],
     threatIndicators: isMalicious 
-      ? ['Win32 PE header matches suspicious dropper profile', 'High Shannon entropy suggests encrypted packed overlay (7.68 / 8.00)']
-      : ['File structure matches standard PDF format', 'Low entropy confirms uncompressed plaintext structure'],
+      ? ['Matches verified threat intelligence signature in CyberGuard ThreatDB', 'Identified as known hostile or EICAR testing payload']
+      : isKnownClean
+      ? ['Matches recognized clean baseline hash']
+      : ['Hash not found in pre-indexed signature database', 'File payload required for static Shannon entropy and magic byte dissection', 'Unknown verdict: Do not assume unindexed hashes are clean'],
     recommendation: isMalicious 
-      ? 'CRITICAL: Confirmed malicious payload (AsyncRAT Trojan). Isolate host endpoint immediately.'
-      : 'File hash exhibits clean baseline metrics. No malicious behavior detected.',
+      ? 'CRITICAL: Confirmed malicious payload signature. Quarantining or host isolation recommended.'
+      : isKnownClean
+      ? 'Verified standard reference hash with 0 threat flags.'
+      : 'STATUS UNKNOWN: This hash is not present in local threat intelligence databases. Upload the actual binary file for entropy, byte extraction, and static analysis.',
     scoreBreakdown,
     timestamp: new Date().toISOString()
   };

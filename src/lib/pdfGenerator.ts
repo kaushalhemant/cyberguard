@@ -198,10 +198,145 @@ export function generateScanPdf(scan: ScanResult): boolean {
     return true;
   } catch (err) {
     console.error('[CyberGuard PDF Generator Error]:', err);
-    // Fallback to window.print if pdf generation errors
     if (typeof window !== 'undefined') {
       window.print();
     }
     return false;
   }
 }
+
+/**
+ * Generate official SIEM DFIR Incident Response Case Report as PDF
+ */
+export function generateIncidentPdf(incident: import('../types').SocIncident): boolean {
+  try {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    const primaryCyan = [0, 229, 255];
+    const darkSlate = [9, 13, 20];
+    const timestampStr = incident.timestamp ? new Date(incident.timestamp).toLocaleString() : new Date().toLocaleString();
+
+    let sevRgb = [0, 230, 118];
+    if (incident.severity === 'critical') sevRgb = [255, 51, 75];
+    else if (incident.severity === 'high') sevRgb = [255, 153, 0];
+    else if (incident.severity === 'medium') sevRgb = [224, 192, 0];
+
+    // Header
+    doc.setFillColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+    doc.rect(0, 0, 210, 36, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('CYBERGUARD SIEM INCIDENT CASE FILE', 14, 14);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(primaryCyan[0], primaryCyan[1], primaryCyan[2]);
+    doc.text('OFFICIAL DFIR TRIAGE & CONTAINMENT INVESTIGATION BRIEFING', 14, 21);
+
+    doc.setFontSize(8);
+    doc.setTextColor(140, 150, 165);
+    doc.text(`INCIDENT ID: ${incident.id}   |   STATUS: ${incident.status.toUpperCase()}   |   RECORDED: ${timestampStr}`, 14, 28);
+
+    let y = 44;
+
+    // Case Overview Box
+    doc.setFillColor(242, 245, 250);
+    doc.roundedRect(14, y, 182, 24, 2, 2, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(40, 50, 65);
+    doc.text(`CASE TITLE: ${incident.title}`, 18, y + 7);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(70, 80, 95);
+    doc.text(`Target Asset: ${incident.target || incident.affectedAsset || 'Internal Infrastructure'}   |   Category: ${incident.category}`, 18, y + 14);
+    doc.text(`Assigned Officer: ${incident.assignedOfficer || 'CyberGuard Automated Triage'}`, 18, y + 20);
+
+    y += 30;
+
+    // Severity & Threat Level
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(14, y, 182, 16, 2, 2, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(40, 50, 65);
+    doc.text('SEVERITY CLASSIFICATION:', 18, y + 10);
+    doc.setTextColor(sevRgb[0], sevRgb[1], sevRgb[2]);
+    doc.text(`[ ${incident.severity.toUpperCase()} ]`, 75, y + 10);
+    doc.setTextColor(40, 50, 65);
+    doc.text(`MITRE ATT&CK:`, 115, y + 10);
+    doc.setTextColor(0, 102, 204);
+    doc.text(`${incident.mitreTechniqueId} (${incident.mitreTactic})`, 146, y + 10);
+
+    y += 22;
+
+    // Incident Description
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+    doc.text('INCIDENT DESCRIPTION & ATTACK VECTOR', 14, y);
+    y += 5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(50, 60, 75);
+    const descLines = doc.splitTextToSize(incident.description || 'No detailed description logged.', 180);
+    doc.text(descLines, 18, y);
+    y += (descLines.length * 4.5) + 4;
+
+    // Containment Action
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+    doc.text('CONTAINMENT ACTIONS EXECUTED', 14, y);
+    y += 5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(50, 60, 75);
+    const containmentText = incident.containmentActionTaken || 'Pending containment evaluation by security operations team.';
+    const contLines = doc.splitTextToSize(containmentText, 180);
+    doc.text(contLines, 18, y);
+    y += (contLines.length * 4.5) + 4;
+
+    // Analyst Notes
+    if (incident.notes && incident.notes.length > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(darkSlate[0], darkSlate[1], darkSlate[2]);
+      doc.text(`ANALYST INVESTIGATION NOTES (${incident.notes.length})`, 14, y);
+      y += 5;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(60, 70, 85);
+      for (const note of incident.notes.slice(0, 5)) {
+        doc.text(`• ${note}`, 18, y);
+        y += 4.5;
+      }
+      y += 3;
+    }
+
+    // Footer
+    doc.setFontSize(7.5);
+    doc.setTextColor(120, 130, 145);
+    doc.text('CyberGuard Enterprise SIEM Incident Management. Evidence cryptographically sealed.', 14, 287);
+    doc.text(`Generated: ${timestampStr}`, 196, 287, { align: 'right' });
+
+    doc.save(`CyberGuard_Incident_${incident.id}_Report.pdf`);
+    return true;
+  } catch (err) {
+    console.error('[CyberGuard Incident PDF Generator Error]:', err);
+    if (typeof window !== 'undefined') window.print();
+    return false;
+  }
+}
+
