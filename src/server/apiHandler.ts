@@ -178,15 +178,15 @@ function resolveRoutePath(req: any): { route: string; segments: string[] } {
     segments = queryPath.trim().split('/').filter(Boolean);
   }
 
-  // Filter out literal rewrite tokens
-  segments = segments.filter(s => s !== '[...path]' && s !== 'api');
+  // Filter out literal rewrite tokens and index file references
+  segments = segments.filter(s => s !== '[...path]' && s !== 'api' && s !== 'index.js' && s !== 'index');
 
   // Fallback to inspecting Vercel invocation headers or req.url
   if (segments.length === 0) {
-    const rawPath = req.headers?.['x-matched-path'] || req.headers?.['x-invoke-path'] || req.url || '';
+    const rawPath = req.headers?.['x-matched-path'] || req.headers?.['x-invoke-path'] || req.headers?.['x-forwarded-uri'] || req.url || '';
     const cleanUrl = String(rawPath).split('?')[0].split('#')[0];
     const pathWithoutPrefix = cleanUrl.replace(/^\/api\/?/, '').replace(/^\//, '');
-    segments = pathWithoutPrefix.split('/').filter(s => s && s !== '[...path]' && s !== 'api');
+    segments = pathWithoutPrefix.split('/').filter(s => s && s !== '[...path]' && s !== 'api' && s !== 'index.js' && s !== 'index');
   }
 
   const route = segments.join('/').toLowerCase();

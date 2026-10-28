@@ -2467,12 +2467,12 @@ function resolveRoutePath(req) {
   } else if (typeof queryPath === "string" && queryPath.trim()) {
     segments = queryPath.trim().split("/").filter(Boolean);
   }
-  segments = segments.filter((s) => s !== "[...path]" && s !== "api");
+  segments = segments.filter((s) => s !== "[...path]" && s !== "api" && s !== "index.js" && s !== "index");
   if (segments.length === 0) {
-    const rawPath = req.headers?.["x-matched-path"] || req.headers?.["x-invoke-path"] || req.url || "";
+    const rawPath = req.headers?.["x-matched-path"] || req.headers?.["x-invoke-path"] || req.headers?.["x-forwarded-uri"] || req.url || "";
     const cleanUrl = String(rawPath).split("?")[0].split("#")[0];
     const pathWithoutPrefix = cleanUrl.replace(/^\/api\/?/, "").replace(/^\//, "");
-    segments = pathWithoutPrefix.split("/").filter((s) => s && s !== "[...path]" && s !== "api");
+    segments = pathWithoutPrefix.split("/").filter((s) => s && s !== "[...path]" && s !== "api" && s !== "index.js" && s !== "index");
   }
   const route = segments.join("/").toLowerCase();
   return { route, segments };
