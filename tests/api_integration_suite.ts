@@ -1,4 +1,4 @@
-import handler from '../api/[...path]';
+import handler from '../src/server/apiHandler';
 
 interface MockResponse {
   statusCode: number;
@@ -121,14 +121,14 @@ async function runFullIntegrationSuite() {
       validator: (data: any) => (data.syntheticConfidence === null || typeof data.syntheticConfidence === 'number') && Array.isArray(data.forensicEvidence)
     },
     {
-      name: 'GET /api/ai-swarm/telemetry (Autonomous AI SOC Swarm)',
+      name: 'GET /api/ai-swarm/telemetry (Autonomous AI SOC Swarm - Unconfigured Truth)',
       req: { method: 'GET', url: '/api/ai-swarm/telemetry', query: { path: ['ai-swarm', 'telemetry'] } },
-      validator: (data: any) => Array.isArray(data.activeAgents) && data.activeAgents.length === 4 && Array.isArray(data.events)
+      validator: (data: any) => data.swarmStatus === 'INFRASTRUCTURE_NOT_CONFIGURED' && Array.isArray(data.activeAgents) && data.totalThreatsNeutralized === 0
     },
     {
-      name: 'POST /api/ai-swarm/action (Dispatch Autonomous Playbook)',
+      name: 'POST /api/ai-swarm/action (Dispatch Autonomous Playbook - Honest Refusal)',
       req: { method: 'POST', url: '/api/ai-swarm/action', query: { path: ['ai-swarm', 'action'] }, body: { agentId: 'agent_sentinel_alpha', playbook: 'Kernel Trap', target: 'WS-092' } },
-      validator: (data: any) => data.success === true && !!data.event?.id
+      validator: (data: any) => data.success === false && data.configured === false && typeof data.error === 'string'
     },
     {
       name: 'GET /api/satellite/mesh (LEO Constellation & QKD Telemetry)',
@@ -144,6 +144,31 @@ async function runFullIntegrationSuite() {
       name: 'POST /api/scan-link (SSRF Cloud Metadata Protection)',
       req: { method: 'POST', url: '/api/scan-link', query: { path: ['scan-link'] }, body: { url: 'http://169.254.169.254/latest/meta-data/' } },
       validator: (data: any) => !!data.scan && data.scan.riskScore >= 90 && data.scan.detectedThreats.some((t: string) => t.includes('SSRF'))
+    },
+    {
+      name: 'POST /api/scan-link (SSRF Integer Decimal IP Bypass Prevention)',
+      req: { method: 'POST', url: '/api/scan-link', query: { path: ['scan-link'] }, body: { url: 'http://2130706433/' } },
+      validator: (data: any) => !!data.scan && data.scan.detectedThreats.some((t: string) => t.includes('SSRF') || t.includes('private'))
+    },
+    {
+      name: 'POST /api/scan-link (SSRF CGNAT 100.64.0.0/10 Prevention)',
+      req: { method: 'POST', url: '/api/scan-link', query: { path: ['scan-link'] }, body: { url: 'http://100.64.0.1/admin' } },
+      validator: (data: any) => !!data.scan && data.scan.detectedThreats.some((t: string) => t.includes('SSRF') || t.includes('Carrier-Grade NAT'))
+    },
+    {
+      name: 'POST /api/soc/osint-lookup (Full URL with Credentials and Port Extraction)',
+      req: { method: 'POST', url: '/api/soc/osint-lookup', query: { path: ['soc', 'osint-lookup'] }, body: { target: 'https://admin:secret@cloudflare.com:8443/cdn-cgi/trace' } },
+      validator: (data: any) => data.target === 'cloudflare.com' && data.isCdnOrProxy === true
+    },
+    {
+      name: 'POST /api/soc/osint-lookup (IPv6 Target Normalization & ASN)',
+      req: { method: 'POST', url: '/api/soc/osint-lookup', query: { path: ['soc', 'osint-lookup'] }, body: { target: '2001:4860:4860::8888' } },
+      validator: (data: any) => data.ipVersion === 'IPv6' && data.target === '2001:4860:4860::8888'
+    },
+    {
+      name: 'POST /api/deepfake/scan (Zero Fake Scores & Honest Forensic Evidence Check)',
+      req: { method: 'POST', url: '/api/deepfake/scan', query: { path: ['deepfake', 'scan'] }, body: { targetName: 'test_sample.png', mediaType: 'image' } },
+      validator: (data: any) => Array.isArray(data.forensicEvidence) && data.forensicEvidence.some((e: any) => e.status === 'not_checked')
     },
     {
       name: 'POST /api/soc/hash-lookup (Unknown Hash Truthful Isolation)',

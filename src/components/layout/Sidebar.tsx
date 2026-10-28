@@ -97,7 +97,7 @@ export default function Sidebar({
           badge: openIncidentsCount > 0 ? openIncidentsCount : undefined,
           badgeColor: 'bg-red-500/20 text-red-400 border-red-500/40'
         },
-        { id: 'ai-soc-swarm', label: 'Autonomous AI Swarm', icon: Bot, isAi: true, badge: '4/4', badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+        { id: 'ai-soc-swarm', label: 'Autonomous AI Swarm', icon: Bot, isAi: true, badge: 'OFFLINE', badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
         { id: 'pqc-audit', label: 'Post-Quantum (PQC)', icon: Lock }
       ]
     },

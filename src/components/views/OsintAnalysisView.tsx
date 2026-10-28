@@ -214,6 +214,41 @@ export default function OsintAnalysisView({
                     />
                   </div>
                 </div>
+
+                {/* CDN / Anycast Edge vs Origin Distinction */}
+                {currentResult.location?.isHostingOrCdn && (
+                  <div className="p-2.5 rounded bg-cyan-950/40 border border-cyan-500/30 text-[11px] font-mono text-cyan-300 flex items-start gap-2">
+                    <Server className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-white">Edge CDN / Cloud Anycast Node</strong>: IP routes through {currentResult.location.cdnProvider || 'Anycast Infrastructure'}.
+                      Geographic location ({currentResult.location.country}) represents the closest edge PoP, not the origin server.
+                    </div>
+                  </div>
+                )}
+
+                {/* Domain Registration Information (Separated from IP Geolocation) */}
+                {currentResult.domainRegistration && (
+                  <div className="p-2.5 rounded bg-[#101726] border border-[#1C273C] grid grid-cols-2 gap-2 text-[10px] font-mono">
+                    <div>
+                      <span className="text-slate-400 block">Domain Registrar</span>
+                      <span className="text-white font-bold">{currentResult.domainRegistration.registrar}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Domain Age</span>
+                      <span className="text-cyan-300 font-bold">
+                        {currentResult.domainRegistration.domainAgeDays !== undefined 
+                          ? `${currentResult.domainRegistration.domainAgeDays} days` 
+                          : 'Established Domain'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Data Source & Limitations Attribution */}
+                <div className="pt-2 border-t border-[#1C273C] flex flex-col sm:flex-row sm:items-center justify-between text-[10px] font-mono text-slate-400 gap-1">
+                  <span>Source: <strong>{currentResult.location?.source || 'Authoritative DNS / GeoIP Registry'}</strong></span>
+                  <span>Audited: {new Date(currentResult.timestamp).toLocaleTimeString()}</span>
+                </div>
               </div>
 
               {/* Open Ports & Services Audit */}

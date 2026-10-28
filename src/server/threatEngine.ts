@@ -973,15 +973,46 @@ async function probeTcpPort(host: string, port: number, timeoutMs: number = 800)
 // 8. EVIDENCE-BASED OSINT & INFRASTRUCTURE INSPECTOR
 // ---------------------------------------------------------------------
 export async function analyzeOsint(target: string): Promise<any> {
-  const cleanTarget = target.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
-  const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(cleanTarget);
+  let normalized = (target || '').trim();
+
+  // 1. Extract hostname if full URL, credentials, or path is provided
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalized) || normalized.includes('/') || normalized.includes('@')) {
+    try {
+      const urlObj = new URL(normalized.includes('://') ? normalized : `http://${normalized}`);
+      normalized = urlObj.hostname;
+    } catch {
+      normalized = normalized.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '').split('/')[0].split('@').pop()?.split(':')[0] || normalized;
+    }
+  }
+
+  // Strip IPv6 URL brackets if present (e.g. "[2001:db8::1]")
+  if (normalized.startsWith('[') && normalized.endsWith(']')) {
+    normalized = normalized.slice(1, -1);
+  }
+
+  // Strip port if not an IPv6 address
+  if (!normalized.includes(':') && normalized.includes(':')) {
+    normalized = normalized.split(':')[0];
+  }
+
+  // Strip trailing dot from FQDN
+  const cleanTarget = normalized.replace(/\.$/, '').toLowerCase().trim();
+  const ipVersion = net.isIP(cleanTarget); // 4 = IPv4, 6 = IPv6, 0 = domain/hostname
+  const isIp = ipVersion !== 0;
   const timestamp = new Date().toISOString();
 
-  // SSRF Protection: Check if target IP is in a private RFC1918 or loopback range
-  if (isIp && isPrivateOrReservedIpv4(cleanTarget)) {
+  // SSRF Protection: Check if target IP is in a private RFC1918, CGNAT, loopback, or cloud metadata range
+  const isPrivateIp = (ipVersion === 4 && isPrivateOrReservedIpv4(cleanTarget)) ||
+                      (ipVersion === 6 && isPrivateOrReservedIpv6(cleanTarget)) ||
+                      cleanTarget === 'localhost' ||
+                      cleanTarget.endsWith('.local') ||
+                      cleanTarget.endsWith('.internal');
+
+  if (isPrivateIp) {
     return {
       target: cleanTarget,
-      isIp: true,
+      isIp,
+      ipVersion: ipVersion || undefined,
       resolvedIp: cleanTarget,
       hostname: 'internal-private-host.local',
       location: {
@@ -996,20 +1027,22 @@ export async function analyzeOsint(target: string): Promise<any> {
         source: 'CyberGuard Local RFC Guard'
       },
       reputationScore: 0,
-      scoreBreakdown: [{ rule: 'RFC 1918 Private Non-Routable Network Address', points: 0 }],
+      scoreBreakdown: [{ rule: 'RFC 1918 / Loopback Private Non-Routable Address', points: 0 }],
       blacklists: [
         { name: 'VirusTotal ThreatDB', listed: false, category: 'Private IP' }
       ],
       openPorts: [],
       dnsRecords: [],
       threatCategories: ['Internal Private Asset'],
-      investigatorNotes: `Target ${cleanTarget} is a non-routable private network address (RFC 1918 / Loopback). External public OSINT lookups are not applicable.`,
+      investigatorNotes: `Target ${cleanTarget} is a non-routable private network address (RFC 1918 / Loopback / Cloud Metadata). External public OSINT lookups are not applicable.`,
       timestamp
     };
   }
 
   let resolvedIp = cleanTarget;
   let allResolvedIps: string[] = [];
+  let realA: string[] = [];
+  let realAaaa: string[] = [];
   let realMx: any[] = [];
   let realTxt: string[][] = [];
   let realNs: string[] = [];
@@ -1023,20 +1056,24 @@ export async function analyzeOsint(target: string): Promise<any> {
       if (ptrs.length > 0) reverseHost = ptrs[0];
     } catch {}
   } else {
-    // 1. Live DNS Queries for Domain
+    // 1. Dual-Stack Live DNS Queries for Domain
     try {
-      allResolvedIps = await dns.resolve4(cleanTarget);
-      resolvedIp = allResolvedIps[0] || '';
+      const [aRes, aaaaRes, mxRes, txtRes, nsRes] = await Promise.allSettled([
+        dns.resolve4(cleanTarget),
+        dns.resolve6(cleanTarget),
+        dns.resolveMx(cleanTarget),
+        dns.resolveTxt(cleanTarget),
+        dns.resolveNs(cleanTarget)
+      ]);
+      if (aRes.status === 'fulfilled') realA = aRes.value;
+      if (aaaaRes.status === 'fulfilled') realAaaa = aaaaRes.value;
+      if (mxRes.status === 'fulfilled') realMx = mxRes.value;
+      if (txtRes.status === 'fulfilled') realTxt = txtRes.value;
+      if (nsRes.status === 'fulfilled') realNs = nsRes.value;
     } catch {}
-    try {
-      realMx = await dns.resolveMx(cleanTarget);
-    } catch {}
-    try {
-      realTxt = await dns.resolveTxt(cleanTarget);
-    } catch {}
-    try {
-      realNs = await dns.resolveNs(cleanTarget);
-    } catch {}
+
+    allResolvedIps = [...realA, ...realAaaa];
+    resolvedIp = realA[0] || realAaaa[0] || '';
 
     // 2. Query RDAP for domain registration & age
     try {
@@ -1143,6 +1180,8 @@ export async function analyzeOsint(target: string): Promise<any> {
   return {
     target: cleanTarget,
     isIp,
+    ipVersion: ipVersion === 6 ? 'IPv6' : (ipVersion === 4 ? 'IPv4' : undefined),
+    isCdnOrProxy: geoResult.isHostingOrCdn,
     resolvedIp: resolvedIp || (isIp ? cleanTarget : 'Unresolved'),
     allResolvedIps: allResolvedIps.length > 0 ? allResolvedIps : (isIp ? [cleanTarget] : []),
     hostname: isIp ? (reverseHost || geoResult.reverseDns || cleanTarget) : cleanTarget,
@@ -1185,7 +1224,7 @@ export async function analyzeOsint(target: string): Promise<any> {
       `Threat score evaluated at ${finalScore}/100.`,
     evidence: {
       indicator: cleanTarget,
-      indicatorType: isIp ? 'ipv4' : 'domain',
+      indicatorType: isIp ? (ipVersion === 6 ? 'ipv6' : 'ipv4') : 'domain',
       resolvedIp: resolvedIp || cleanTarget,
       geolocationSource: geoResult.source,
       geoResult,
@@ -1481,13 +1520,13 @@ export function analyzeDeepfakeMedia(targetName: string, mediaType: string = 'im
         metric: 'Cryptographic SHA-256 Hash',
         measured: sha256Hash ? `${sha256Hash.substring(0, 16)}...` : 'Not computed',
         baseline: 'Deterministic 256-bit hash',
-        status: sha256Hash ? 'clean' : 'anomaly'
+        status: sha256Hash ? 'clean' : 'error'
       },
       {
         metric: 'Shannon Information Entropy',
         measured: entropy !== undefined ? `${entropy} / 8.00` : 'Not measured',
         baseline: 'Uncompressed binary density',
-        status: 'clean'
+        status: entropy !== undefined ? 'clean' : 'not_checked'
       },
       {
         metric: 'Magic Byte File Format',
@@ -1500,6 +1539,18 @@ export function analyzeDeepfakeMedia(targetName: string, mediaType: string = 'im
         measured: hasGenerativeMetadata ? `Flagged (${generativeMetadataDetected.join(', ')})` : 'Zero Generative Signatures in Headers',
         baseline: 'No generative prompt strings',
         status: hasGenerativeMetadata ? 'anomaly' : 'clean'
+      },
+      {
+        metric: 'Neural Inference Model (FaceForensics++ / PyTorch)',
+        measured: 'Worker Daemon Not Configured',
+        baseline: 'Live GPU inference endpoint',
+        status: 'not_checked'
+      },
+      {
+        metric: 'Subdermal rPPG Pulse Telemetry',
+        measured: 'Unmeasured (Requires video stream & neural worker)',
+        baseline: 'Synthetic pulse analysis',
+        status: 'not_checked'
       }
     ],
     investigatorNotes: `Binary properties, SHA-256 hash, and EXIF/header strings were successfully inspected. ` +
@@ -1511,8 +1562,8 @@ export function analyzeDeepfakeMedia(targetName: string, mediaType: string = 'im
 }
 
 // ---------------------------------------------------------------------
-// 10. 2030 AUTONOMOUS MULTI-AGENT AI SOC SWARM
-// Coordinated 4-agent autonomous defense mesh executing real-time micro-containment
+// 10. 2030 AUTONOMOUS MULTI-AGENT AI SOC SWARM (HONEST BLUEPRINT STATE)
+// Transparent blueprint architecture with honest unconfigured status
 // ---------------------------------------------------------------------
 
 export const SWARM_AGENTS = [
@@ -1521,110 +1572,76 @@ export const SWARM_AGENTS = [
     name: 'Sentinel-Alpha',
     codename: 'SENTINEL-01',
     role: 'Zero-Day Interception' as const,
-    status: 'ACTIVE' as const,
-    confidenceScore: 99.4,
-    threatsNeutralized: 148,
-    activePlaybook: 'Neural Kernel Memory-Shield v3',
-    latencyMs: 1.2
+    status: 'OFFLINE' as const,
+    confidenceScore: 0,
+    threatsNeutralized: 0,
+    activePlaybook: 'Awaiting eBPF Kernel Daemon',
+    latencyMs: 0
   },
   {
     id: 'agent_crypt_omega',
     name: 'Crypt-Omega',
     codename: 'CRYPT-02',
     role: 'Quantum Lattice Audit' as const,
-    status: 'ACTIVE' as const,
-    confidenceScore: 99.9,
-    threatsNeutralized: 82,
-    activePlaybook: 'NIST ML-KEM Lattice Verifier',
-    latencyMs: 0.8
+    status: 'OFFLINE' as const,
+    confidenceScore: 0,
+    threatsNeutralized: 0,
+    activePlaybook: 'Awaiting Lattice HSM Enclave',
+    latencyMs: 0
   },
   {
     id: 'agent_recon_sigma',
     name: 'Recon-Sigma',
     codename: 'RECON-03',
     role: 'Adversarial AI & Deepfake Hunter' as const,
-    status: 'PATROLLING' as const,
-    confidenceScore: 98.7,
-    threatsNeutralized: 214,
-    activePlaybook: 'Spectral FFT Artifact Dissector',
-    latencyMs: 2.1
+    status: 'OFFLINE' as const,
+    confidenceScore: 0,
+    threatsNeutralized: 0,
+    activePlaybook: 'Awaiting PyTorch Inference Node',
+    latencyMs: 0
   },
   {
     id: 'agent_neutralizer_x',
     name: 'Neutralizer-X',
     codename: 'NEUTRAL-04',
     role: 'Autonomous Counter-Payload' as const,
-    status: 'ACTIVE' as const,
-    confidenceScore: 99.8,
-    threatsNeutralized: 391,
-    activePlaybook: 'Micro-Isolation Ephemeral Honeyswarm',
-    latencyMs: 0.4
+    status: 'OFFLINE' as const,
+    confidenceScore: 0,
+    threatsNeutralized: 0,
+    activePlaybook: 'Awaiting SOAR Orchestrator Webhook',
+    latencyMs: 0
   }
 ];
 
-let memorySwarmEvents: any[] = [
-  {
-    id: 'SWARM-EVT-2030-8801',
-    timestamp: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
-    agentCodename: 'SENTINEL-01',
-    severity: 'critical',
-    eventType: 'ZERO_DAY_PREEMPTION',
-    target: 'Kernel WASM Memory Sandbox WS-092',
-    autonomousAction: 'Sub-millisecond memory page relocation & hypervisor trap applied',
-    consensusScore: 99.4,
-    details: 'Polymorphic shellcode attempted ROP gadget chain execution; neutralized in 1.2ms without host downtime.'
-  },
-  {
-    id: 'SWARM-EVT-2030-8794',
-    timestamp: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
-    agentCodename: 'RECON-03',
-    severity: 'high',
-    eventType: 'DEEPFAKE_NEUTRALIZATION',
-    target: 'Executive Video Call Stream (ID: Conf-4091)',
-    autonomousAction: 'Synthetic rPPG biometric pulse alarm triggered; stream flagged with watermark',
-    consensusScore: 98.7,
-    details: 'Real-time generative facial synthesis detected attempting CEO wire authorization.'
-  },
-  {
-    id: 'SWARM-EVT-2030-8782',
-    timestamp: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
-    agentCodename: 'CRYPT-02',
-    severity: 'medium',
-    eventType: 'LATTICE_INTEGRITY_CHECK',
-    target: 'LEO Uplink Gateway #4 (Starlink-Gen3-88)',
-    autonomousAction: 'Post-Quantum Kyber-768 re-keying forced across 14 orbital nodes',
-    consensusScore: 99.9,
-    details: 'Harvest-Now-Decrypt-Later eavesdropping telemetry detected from non-allied ground station.'
-  }
-];
+let memorySwarmEvents: any[] = [];
 
 export function getAutonomousAiSwarmState() {
   return {
-    swarmStatus: 'SWARM_SYNCHRONIZED_OPTIMAL',
-    consensusHealth: '100% (Byzantine Fault Tolerant Mesh)',
+    swarmStatus: 'INFRASTRUCTURE_NOT_CONFIGURED',
+    consensusHealth: 'OFFLINE (No Active eBPF / Sovereign LLM Worker Node Registered)',
+    operationalState: 'UNCONFIGURED',
     activeAgents: SWARM_AGENTS,
-    totalThreatsNeutralized: SWARM_AGENTS.reduce((acc, a) => acc + a.threatsNeutralized, 0),
-    events: memorySwarmEvents
+    totalThreatsNeutralized: 0,
+    events: memorySwarmEvents,
+    prerequisites: {
+      eBpfDaemon: 'Unconnected (e.g. Cilium / Tetragon kernel probe required)',
+      llmWorker: 'Unconnected (e.g. Sovereign Ollama / vLLM / Claude API endpoint required)',
+      soarWebhook: 'Unconnected (e.g. Tines / Shuffle orchestrator required)'
+    }
   };
 }
 
 export function executeSwarmPlaybook(agentId: string, playbook: string, target: string) {
   const agent = SWARM_AGENTS.find(a => a.id === agentId || a.codename === agentId) || SWARM_AGENTS[0];
-  const newEvent = {
-    id: `SWARM-EVT-2030-${Math.floor(1000 + Math.random() * 9000)}`,
-    timestamp: new Date().toISOString(),
+  return {
+    success: false,
+    configured: false,
     agentCodename: agent.codename,
-    severity: 'high' as const,
-    eventType: 'MICRO_ISOLATION' as const,
-    target: target || 'Enterprise Edge Gateway Mesh',
-    autonomousAction: `Playbook "${playbook || agent.activePlaybook}" autonomously executed`,
-    consensusScore: agent.confidenceScore,
-    details: `Multi-agent consensus achieved (4/4 votes). Swarm micro-isolation engaged on ${target || 'target asset'}. Zero disruption to benign traffic.`
+    target: target || 'Enterprise Network Asset',
+    playbook: playbook || agent.activePlaybook,
+    error: 'Autonomous agent worker daemon is not configured. Playbook execution aborted to prevent simulated security remediation.',
+    timestamp: new Date().toISOString()
   };
-  agent.threatsNeutralized += 1;
-  memorySwarmEvents.unshift(newEvent);
-  if (memorySwarmEvents.length > 50) memorySwarmEvents = memorySwarmEvents.slice(0, 50);
-  return newEvent;
 }
 
 // ---------------------------------------------------------------------
@@ -1633,6 +1650,8 @@ export function executeSwarmPlaybook(agentId: string, playbook: string, target: 
 
 export function getLeoSatelliteMeshTelemetry(): any {
   return {
+    isSimulationPreset: true,
+    telemetrySource: 'Simulation / Orbit Planning Lab (Hardware QKD Ground Station Unconnected)',
     constellationHealthScore: 99.2,
     totalPhotonThroughput: '1.42 x 10^9 Photons/sec',
     spaceToGroundQkdLock: true,

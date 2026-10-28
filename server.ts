@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import express, { Request, Response } from 'express';
-import handler from './api/[...path]';
+import handler from './src/server/apiHandler';
 import {
   lookupEmailBreaches,
   searchCves,

@@ -2,12 +2,12 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/[...path]"
+      "source": "/api",
+      "destination": "/api/health"
     },
     {
-      "source": "/api",
-      "destination": "/api/[...path]"
+      "source": "/api/",
+      "destination": "/api/health"
     },
     {
       "source": "/((?!api/).*)",

@@ -311,7 +311,7 @@ export default function DeepfakeDetectionView({
               {loading ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                  <span>Executing FFT & rPPG Forensics...</span>
+                  <span>Computing SHA-256, Entropy & Inspecting Signatures...</span>
                 </>
               ) : (
                 <>
@@ -324,7 +324,7 @@ export default function DeepfakeDetectionView({
             {/* Zero Retention Guarantee Pill */}
             <div className="text-[10px] font-mono text-slate-400 text-center flex items-center justify-center gap-1.5 pt-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Strict Zero-Retention: Media payload inspected transiently and purged from RAM.</span>
+              <span>Strict Zero-Retention: Media payload inspected in-memory and immediately purged from RAM.</span>
             </div>
           </div>
         </div>
@@ -340,7 +340,7 @@ export default function DeepfakeDetectionView({
                 No Media Forensics Executed Yet
               </h4>
               <p className="text-xs text-slate-400 max-w-md font-sans">
-                Upload any image, video, or audio file on the left or select a 1-click test preset above to execute biometric rPPG, FFT frequency anomaly, and generative latent analysis.
+                Upload any image, video, or audio file on the left or select a 1-click test preset above to execute cryptographic SHA-256 validation, magic byte format verification, Shannon entropy, and embedded generative AI metadata inspection.
               </p>
             </div>
           ) : (

@@ -29,31 +29,70 @@ export interface AuthSession {
 // ---------------------------------------------------------------------
 
 /**
- * Checks whether an IPv4 address is in a reserved/private/loopback range.
+ * Checks whether an IPv4 address is in a reserved/private/loopback/cloud metadata range.
  */
 export function isPrivateOrReservedIpv4(ip: string): boolean {
-  const parts = ip.split('.').map(Number);
+  if (!ip) return false;
+  // If it's an IPv6 address, it should not be evaluated as IPv4
+  if (ip.includes(':')) {
+    return false;
+  }
+
+  // Check for decimal integer IP (e.g. "2130706433")
+  if (/^\d+$/.test(ip)) {
+    const num = parseInt(ip, 10);
+    if (!isNaN(num) && num >= 0 && num <= 4294967295) {
+      const b1 = (num >>> 24) & 255;
+      const b2 = (num >>> 16) & 255;
+      const b3 = (num >>> 8) & 255;
+      const b4 = num & 255;
+      return isPrivateOrReservedIpv4(`${b1}.${b2}.${b3}.${b4}`);
+    }
+  }
+
+  const parts = ip.split('.').map(p => {
+    if (p.startsWith('0x') || p.startsWith('0X')) return parseInt(p, 16);
+    if (p.length > 1 && p.startsWith('0')) return parseInt(p, 8);
+    return parseInt(p, 10);
+  });
+
   if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) {
     return true; // Malformed IP treated as unsafe
   }
 
-  const [a, b] = parts;
+  const [a, b, c] = parts;
 
   // 0.0.0.0/8 (Current network)
   if (a === 0) return true;
   // 10.0.0.0/8 (Private network)
   if (a === 10) return true;
+  // 100.64.0.0/10 (Carrier-Grade NAT: 100.64.0.0 - 100.127.255.255)
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  // 100.100.100.200 (Alibaba Cloud Metadata)
+  if (a === 100 && b === 100 && c === 100) return true;
   // 127.0.0.0/8 (Loopback)
   if (a === 127) return true;
-  // 169.254.0.0/16 (Link-local / AWS & Cloud Metadata 169.254.169.254)
+  // 169.254.0.0/16 (Link-local / AWS, GCP & Azure Cloud Metadata 169.254.169.254)
   if (a === 169 && b === 254) return true;
   // 172.16.0.0/12 (Private network: 172.16.0.0 - 172.31.255.255)
   if (a === 172 && b >= 16 && b <= 31) return true;
+  // 192.0.0.0/24 (IETF Protocol Assignments)
+  if (a === 192 && b === 0 && c === 0) return true;
+  // 192.0.2.0/24 (TEST-NET-1)
+  if (a === 192 && b === 0 && c === 2) return true;
+  // 192.88.99.0/24 (6to4 Relay Anycast)
+  if (a === 192 && b === 88 && c === 99) return true;
   // 192.168.0.0/16 (Private network)
   if (a === 192 && b === 168) return true;
+  // 198.18.0.0/15 (Network Benchmark Testing: 198.18.0.0 - 198.19.255.255)
+  if (a === 198 && (b === 18 || b === 19)) return true;
+  // 198.51.100.0/24 (TEST-NET-2)
+  if (a === 198 && b === 51 && c === 100) return true;
+  // 203.0.113.0/24 (TEST-NET-3)
+  if (a === 203 && b === 0 && c === 113) return true;
   // 224.0.0.0/4 (Multicast)
   if (a >= 224 && a <= 239) return true;
-  // 240.0.0.0/4 (Reserved)
+  // 240.0.0.0/4 (Reserved / Future Use)
   if (a >= 240) return true;
   // 255.255.255.255 (Broadcast)
   if (ip === '255.255.255.255') return true;
@@ -62,30 +101,48 @@ export function isPrivateOrReservedIpv4(ip: string): boolean {
 }
 
 /**
- * Checks whether an IPv6 address is in a reserved/loopback/private range.
+ * Checks whether an IPv6 address is in a reserved/loopback/private/metadata range.
  */
 export function isPrivateOrReservedIpv6(ip: string): boolean {
-  const clean = ip.toLowerCase().trim();
+  const clean = ip.toLowerCase().trim().replace(/^\[|\]$/g, '');
   // Loopback ::1
   if (clean === '::1' || clean === '0:0:0:0:0:0:0:1') return true;
   // Unspecified ::
   if (clean === '::' || clean === '0:0:0:0:0:0:0:0') return true;
   // Unique local fc00::/7 (fc00... or fd00...)
   if (clean.startsWith('fc') || clean.startsWith('fd')) return true;
-  // Link-local fe80::/10
-  if (clean.startsWith('fe80')) return true;
-  // IPv4-mapped IPv6 ::ffff:127.0.0.1
+  // Link-local fe80::/10 (fe8..., fe9..., fea..., feb...)
+  if (/^fe[89ab]/i.test(clean)) return true;
+  // Discard prefix 100::/64
+  if (clean.startsWith('100:')) return true;
+  // Documentation prefix 2001:db8::/32
+  if (clean.startsWith('2001:db8') || clean.startsWith('2001:0db8')) return true;
+  // IPv4-mapped IPv6 ::ffff:127.0.0.1 or ::ffff:7f00:1
   if (clean.includes('::ffff:')) {
     const v4 = clean.split('::ffff:')[1];
-    return isPrivateOrReservedIpv4(v4);
+    if (v4.includes('.')) {
+      return isPrivateOrReservedIpv4(v4);
+    }
   }
   return false;
 }
 
 /**
+ * Checks whether an IP address (IPv4 or IPv6) belongs to a private/reserved/loopback range.
+ */
+export function isIpPrivateOrReserved(ip: string): boolean {
+  if (!ip) return false;
+  const clean = ip.trim().replace(/^\[|\]$/g, '');
+  if (clean.includes(':')) {
+    return isPrivateOrReservedIpv6(clean);
+  }
+  return isPrivateOrReservedIpv4(clean);
+}
+
+/**
  * Validates a target URL against SSRF attacks.
- * Resolves the hostname via DNS and ensures it does NOT point to localhost,
- * internal subnets, or cloud metadata services.
+ * Resolves the hostname via dual-stack DNS (IPv4 and IPv6) and ensures it does
+ * NOT point to localhost, internal subnets, or cloud metadata services.
  */
 export async function validateUrlSsrf(inputUrl: string): Promise<{
   safe: boolean;
@@ -100,9 +157,12 @@ export async function validateUrlSsrf(inputUrl: string): Promise<{
     }
 
     const parsed = new URL(cleanUrl);
-    const hostname = parsed.hostname.toLowerCase();
+    let hostname = parsed.hostname.toLowerCase();
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      hostname = hostname.slice(1, -1);
+    }
 
-    // Block non-HTTP protocols (e.g. file://, gopher://, dict://)
+    // Block non-HTTP protocols (e.g. file://, gopher://, dict://, ftp://, ldap://)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return { safe: false, hostname, resolvedIps: [], reason: `Forbidden protocol "${parsed.protocol}"` };
     }
@@ -114,19 +174,22 @@ export async function validateUrlSsrf(inputUrl: string): Promise<{
       hostname.endsWith('.local') ||
       hostname.endsWith('.internal') ||
       hostname === 'metadata.google.internal' ||
-      hostname === 'instance-data'
+      hostname === 'metadata.google' ||
+      hostname === 'instance-data' ||
+      hostname === '169.254.169.254'
     ) {
-      return { safe: false, hostname, resolvedIps: [], reason: 'Forbidden local or cloud metadata hostname' };
+      return { safe: false, hostname, resolvedIps: [hostname], reason: 'Forbidden local or cloud metadata hostname' };
     }
 
-    // Check if hostname itself is an IP literal
-    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
+    // Check if hostname itself is an IPv4 literal or integer literal
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || /^\d+$/.test(hostname)) {
       if (isPrivateOrReservedIpv4(hostname)) {
         return { safe: false, hostname, resolvedIps: [hostname], reason: 'Target is a private, reserved, or loopback IPv4 address' };
       }
       return { safe: true, hostname, resolvedIps: [hostname] };
     }
 
+    // Check if hostname is an IPv6 literal
     if (hostname.includes(':')) {
       if (isPrivateOrReservedIpv6(hostname)) {
         return { safe: false, hostname, resolvedIps: [hostname], reason: 'Target is a private, reserved, or loopback IPv6 address' };
@@ -134,18 +197,35 @@ export async function validateUrlSsrf(inputUrl: string): Promise<{
       return { safe: true, hostname, resolvedIps: [hostname] };
     }
 
-    // Resolve DNS records to verify actual IP destination
+    // Resolve DNS records (dual-stack: IPv4 and IPv6)
+    const resolvedIps: string[] = [];
     try {
-      const addresses = await dns.resolve4(hostname);
-      for (const ip of addresses) {
-        if (isPrivateOrReservedIpv4(ip)) {
-          return { safe: false, hostname, resolvedIps: addresses, reason: `Hostname resolves to private/internal IP (${ip})` };
+      const [v4Addresses, v6Addresses] = await Promise.allSettled([
+        dns.resolve4(hostname),
+        dns.resolve6(hostname)
+      ]);
+
+      if (v4Addresses.status === 'fulfilled') {
+        for (const ip of v4Addresses.value) {
+          resolvedIps.push(ip);
+          if (isPrivateOrReservedIpv4(ip)) {
+            return { safe: false, hostname, resolvedIps: [ip], reason: `Hostname resolves to private/internal IPv4 address (${ip})` };
+          }
         }
       }
-      return { safe: true, hostname, resolvedIps: addresses };
+
+      if (v6Addresses.status === 'fulfilled') {
+        for (const ip of v6Addresses.value) {
+          resolvedIps.push(ip);
+          if (isPrivateOrReservedIpv6(ip)) {
+            return { safe: false, hostname, resolvedIps: [ip], reason: `Hostname resolves to private/internal IPv6 address (${ip})` };
+          }
+        }
+      }
+
+      return { safe: true, hostname, resolvedIps };
     } catch {
-      // If DNS resolution fails, allow provider-based lookups (like VirusTotal or URLhaus) to proceed
-      // while preventing direct outbound socket connections
+      // If DNS resolution fails, allow reputation lookup to proceed safely without direct network connection
       return { safe: true, hostname, resolvedIps: [] };
     }
   } catch (err: any) {

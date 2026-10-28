@@ -1,5 +1,5 @@
 import dns from 'dns/promises';
-import { isPrivateOrReservedIpv4, isPrivateOrReservedIpv6 } from '../security';
+import { isIpPrivateOrReserved } from '../security';
 import { checkVirusTotalIp, getVirusTotalApiKey } from '../scanners/virustotalScanner';
 
 export interface GeoIpResult {
@@ -49,7 +49,7 @@ export async function lookupIpIntelligence(ip: string): Promise<GeoIpResult> {
   const timestamp = new Date().toISOString();
 
   // 1. SSRF & Private / Loopback range check
-  if (isPrivateOrReservedIpv4(cleanIp) || isPrivateOrReservedIpv6(cleanIp) || cleanIp === '127.0.0.1' || cleanIp === 'localhost') {
+  if (isIpPrivateOrReserved(cleanIp) || cleanIp === '127.0.0.1' || cleanIp === 'localhost') {
     return {
       ip: cleanIp,
       country: 'Private / Reserved Network',

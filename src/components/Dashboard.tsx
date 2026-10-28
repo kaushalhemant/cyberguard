@@ -5,6 +5,7 @@ import {
 } from '../types';
 import Sidebar, { NavigationTab } from './layout/Sidebar';
 import Header from './layout/Header';
+import { ShieldCheck } from 'lucide-react';
 import Terminal from './Terminal';
 import CommandCenterView from './views/CommandCenterView';
 import DeepfakeDetectionView from './views/DeepfakeDetectionView';
@@ -698,7 +699,7 @@ export default function Dashboard({
   };
 
   return (
-    <div className="min-h-screen bg-[#080C14] text-[#F1F5F9] flex flex-row">
+    <div className="h-screen bg-[#080C14] text-[#F1F5F9] flex flex-row overflow-hidden">
       {/* 1. Persistent Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
@@ -711,7 +712,7 @@ export default function Dashboard({
       />
 
       {/* 2. Main Content Canvas */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         {/* Top Header Bar */}
         <Header
           user={user}
@@ -724,7 +725,7 @@ export default function Dashboard({
         />
 
         {/* Dynamic View Body */}
-        <main className="flex-1 p-3 sm:p-4 lg:p-5 max-w-[1680px] w-full mx-auto space-y-4">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-5 max-w-[1680px] w-full mx-auto space-y-4 pb-20">
           {activeTab === 'command-center' && (
             <CommandCenterView
               scans={scans}
@@ -851,7 +852,7 @@ export default function Dashboard({
             />
           )}
 
-          {activeTab === 'ai-swarm' && (
+          {(activeTab === 'ai-soc-swarm' || activeTab === 'ai-swarm') && (
             <AiSwarmView
               token={token}
               agents={swarmAgents}
@@ -876,6 +877,29 @@ export default function Dashboard({
               isClearing={isClearingScans}
             />
           )}
+
+          {![
+            'command-center', 'url-scanner', 'osint-inspector', 'hash-forensics',
+            'deepfake-detection', 'cve-database', 'email-breach', 'siem-incidents',
+            'stix-bundler', 'threat-radar', 'pqc-audit', 'ai-soc-swarm', 'ai-swarm',
+            'satellite-mesh', 'compliance-settings'
+          ].includes(activeTab) && (
+            <div className="command-card p-10 text-center space-y-4 border-blue-500/30">
+              <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-400">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-white uppercase font-mono tracking-wider">Module Route Initialized</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto font-sans">
+                This workstation module is active. Return to the Command Center to browse active investigations.
+              </p>
+              <button
+                onClick={() => setActiveTab('command-center')}
+                className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-sans text-xs font-semibold uppercase tracking-wider transition-colors shadow-[0_0_12px_rgba(59,130,246,0.3)]"
+              >
+                Return to Command Center
+              </button>
+            </div>
+          )}
         </main>
       </div>
 
@@ -896,11 +920,23 @@ export default function Dashboard({
 
       {/* 5. SOC Terminal Shell Drawer */}
       {showTerminal && (
-        <Terminal
-          user={user}
-          token={token}
-          onClose={() => setShowTerminal(false)}
-        />
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs">
+          <div className="w-full max-w-5xl mx-auto mb-3 px-3">
+            <div className="flex justify-end mb-1">
+              <button
+                onClick={() => setShowTerminal(false)}
+                className="px-2.5 py-1 rounded bg-[#111A2E] hover:bg-[#1E2D48] text-slate-300 border border-[#202E48] text-xs font-mono transition-colors"
+              >
+                ✕ Close Shell
+              </button>
+            </div>
+            <Terminal
+              user={user}
+              token={token}
+              onClose={() => setShowTerminal(false)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

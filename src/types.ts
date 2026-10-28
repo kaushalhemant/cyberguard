@@ -39,6 +39,20 @@ export interface ScanResult {
   targetImage?: string;
   imageFileName?: string;
   detectedThreats?: string[];
+  evidence?: {
+    indicator: string;
+    resolvedIps?: string[];
+    virustotal?: {
+      matched: boolean;
+      maliciousCount: number;
+      suspiciousCount: number;
+      totalEngines: number;
+      flaggedEngines: string[];
+      permalink?: string;
+    } | null;
+    limitations?: string;
+    [key: string]: any;
+  };
 }
 
 export interface PaymentRequest {
@@ -108,12 +122,26 @@ export interface OsintResult {
   target: string;
   resolvedIp: string;
   hostname: string;
+  isIp?: boolean;
+  ipVersion?: string;
+  isCdnOrProxy?: boolean;
+  allResolvedIps?: string[];
+  reverseDns?: string | null;
   location: {
     country: string;
     city: string;
     isp: string;
     asn: string;
     flag: string;
+    region?: string;
+    isHostingOrCdn?: boolean;
+    cdnProvider?: string;
+    source?: string;
+    [key: string]: any;
+  };
+  domainRegistration?: {
+    registrar: string;
+    domainAgeDays?: number;
   };
   reputationScore: number; // 0 (Clean) to 100 (Malicious)
   blacklists: { name: string; listed: boolean; category?: string }[];
@@ -129,6 +157,7 @@ export interface OsintResult {
   threatCategories: string[];
   investigatorNotes?: string;
   scoreBreakdown?: { rule: string; points: number }[];
+  evidence?: any;
   timestamp: string;
 }
 

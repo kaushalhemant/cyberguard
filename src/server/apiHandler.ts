@@ -13,8 +13,8 @@ import {
   getAutonomousAiSwarmState,
   executeSwarmPlaybook,
   getLeoSatelliteMeshTelemetry
-} from '../src/server/threatEngine';
-import { generateBreachReportSummary } from '../src/server/forensicReportEngine';
+} from './threatEngine';
+import { generateBreachReportSummary } from './forensicReportEngine';
 import {
   createSessionToken,
   verifySessionToken,
@@ -23,7 +23,7 @@ import {
   checkRateLimit,
   sanitizeText,
   validateUrlSsrf
-} from '../src/server/security';
+} from './security';
 
 const MASTER_USER = {
   id: 'usr_soc_official_master',
@@ -166,10 +166,10 @@ async function parseRequestBody(req: any): Promise<any> {
 
 /**
  * Robust path normalizer that resolves the target route regardless of whether
- * req.query.path is an array, string, or omitted.
+ * req.query.path is an array, string, or omitted. Strips literal rewrite tokens.
  */
 function resolveRoutePath(req: any): { route: string; segments: string[] } {
-  const queryPath = req.query?.path;
+  let queryPath = req.query?.path;
   let segments: string[] = [];
 
   if (Array.isArray(queryPath)) {
@@ -178,11 +178,15 @@ function resolveRoutePath(req: any): { route: string; segments: string[] } {
     segments = queryPath.trim().split('/').filter(Boolean);
   }
 
-  // If query.path was empty or missing, fallback to parsing req.url
-  if (segments.length === 0 && req.url) {
-    const cleanUrl = req.url.split('?')[0].split('#')[0];
+  // Filter out literal rewrite tokens
+  segments = segments.filter(s => s !== '[...path]' && s !== 'api');
+
+  // Fallback to inspecting Vercel invocation headers or req.url
+  if (segments.length === 0) {
+    const rawPath = req.headers?.['x-matched-path'] || req.headers?.['x-invoke-path'] || req.url || '';
+    const cleanUrl = String(rawPath).split('?')[0].split('#')[0];
     const pathWithoutPrefix = cleanUrl.replace(/^\/api\/?/, '').replace(/^\//, '');
-    segments = pathWithoutPrefix.split('/').filter(Boolean);
+    segments = pathWithoutPrefix.split('/').filter(s => s && s !== '[...path]' && s !== 'api');
   }
 
   const route = segments.join('/').toLowerCase();
@@ -210,11 +214,14 @@ function getRequestUser(req: any): { id: string; email: string; role: string; pl
 
 export default async function handler(req: any, res: any) {
   let route = '';
+  const correlationId = `req_${crypto.randomUUID().substring(0, 8)}`;
   try {
     // 1. CORS Headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('X-CyberGuard-Correlation-Id', correlationId);
+
     if (req.method === 'OPTIONS') {
       return res.status(200).end();
     }
@@ -236,7 +243,9 @@ export default async function handler(req: any, res: any) {
         status: 'ok',
         server: 'CyberGuard Threat Intelligence & Incident Workstation',
         deterministicEngine: true,
+        version: '2026.4.1',
         timestamp: new Date().toISOString(),
+        correlationId,
         resolvedRoute: `/api/${route}`
       });
     }
@@ -351,7 +360,7 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: `Method ${method} Not Allowed for /api/scan-link. Expected POST.` });
       }
 
-      const url = body.url || body.targetUrl || body.link;
+      const url = body.url || body.targetUrl || body.link || body.target;
       if (!url || typeof url !== 'string') {
         return res.status(400).json({ error: 'Target URL is required in JSON body ({ url: "https://..." }).' });
       }
@@ -478,7 +487,7 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: `Method ${method} Not Allowed for /api/soc/osint-lookup. Expected POST.` });
       }
 
-      const target = body.target || body.ip || body.domain;
+      const target = body.target || body.ip || body.domain || body.query || body.url || body.host;
       if (!target || typeof target !== 'string') {
         return res.status(400).json({ error: 'Valid IP address or domain target is required in JSON body ({ target: "..." }).' });
       }
@@ -727,8 +736,8 @@ export default async function handler(req: any, res: any) {
     // -----------------------------------------------------------------
     if (route === 'ai-swarm/action') {
       const { agentId, playbook, target } = body;
-      const actionEvent = executeSwarmPlaybook(agentId || 'agent_sentinel_alpha', playbook, target);
-      return res.status(200).json({ success: true, event: actionEvent });
+      const actionResult = executeSwarmPlaybook(agentId || 'agent_sentinel_alpha', playbook, target);
+      return res.status(200).json(actionResult);
     }
 
     // -----------------------------------------------------------------
@@ -799,7 +808,7 @@ export default async function handler(req: any, res: any) {
     // -----------------------------------------------------------------
     return res.status(404).json({
       error: `API route not found: /api/${route}`,
-      receivedUrl: req.url,
+      correlationId,
       resolvedRoute: route,
       supportedRoutes: [
         'POST /api/auth/login',
@@ -832,9 +841,10 @@ export default async function handler(req: any, res: any) {
       ]
     });
   } catch (err: any) {
-    console.error(`[CyberGuard API Error] Exception during /api/${route}:`, err);
+    console.error(`[CyberGuard API Error ${correlationId}] Exception during /api/${route}:`, err);
     return res.status(500).json({
-      error: err.message || 'Internal Server Error during security analysis',
+      error: 'An internal server error occurred during security analysis. The incident has been logged.',
+      correlationId,
       route: `/api/${route}`
     });
   }
