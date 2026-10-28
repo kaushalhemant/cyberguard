@@ -192,7 +192,7 @@ function resolveRoutePath(req: any): { route: string; segments: string[] } {
 /**
  * Extracts the authenticated user or falls back to master session for development/demo.
  */
-function getRequestUser(req: any): { id: string; email: string; role: string; plan: string; fullName: string } {
+function getRequestUser(req: any): { id: string; email: string; role: string; plan: string; fullName: string; scansThisMonth: number } {
   const authHeader = req.headers?.authorization || req.headers?.Authorization;
   const session = verifySessionToken(authHeader);
   if (session) {
@@ -201,7 +201,8 @@ function getRequestUser(req: any): { id: string; email: string; role: string; pl
       email: session.email,
       role: session.role,
       plan: session.plan,
-      fullName: session.email === MASTER_USER.email ? MASTER_USER.fullName : session.email.split('@')[0]
+      fullName: session.email === MASTER_USER.email ? MASTER_USER.fullName : session.email.split('@')[0],
+      scansThisMonth: 0
     };
   }
   return MASTER_USER;
@@ -706,9 +707,10 @@ export default async function handler(req: any, res: any) {
     // ROUTE 17: Neural Deepfake & Synthetic Media Forensics -> /api/deepfake/scan
     // -----------------------------------------------------------------
     if (route === 'deepfake/scan' || route === 'deepfake') {
-      const targetName = body.targetName || body.filename || body.mediaName || 'generative_executive_portrait.png';
-      const mediaType = body.mediaType || (targetName.endsWith('.mp3') || targetName.endsWith('.wav') ? 'audio' : 'image');
-      const deepfakeResult = analyzeDeepfakeMedia(targetName, mediaType, body.payload);
+      const targetName = sanitizeText(body.targetName || body.filename || body.fileName || body.mediaName || 'generative_executive_portrait.png');
+      const payload = body.fileBase64 || body.payload || body.base64 || body.file;
+      const mediaType = body.mediaType || (targetName.endsWith('.mp3') || targetName.endsWith('.wav') ? 'audio' : (targetName.endsWith('.mp4') || targetName.endsWith('.webm') ? 'video' : 'image'));
+      const deepfakeResult = analyzeDeepfakeMedia(targetName, mediaType, payload);
       return res.status(200).json(deepfakeResult);
     }
 

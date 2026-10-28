@@ -23,6 +23,8 @@ export interface ScanRiskReport {
     urlDetails?: {
       originalUrl: string;
       finalUrl?: string;
+      ssrfBlocked?: boolean;
+      reason?: string;
       redirectChain?: string[];
       isIpLiteral?: boolean;
       domain?: string;

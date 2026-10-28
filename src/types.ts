@@ -247,6 +247,11 @@ export interface AiSwarmEvent {
 export interface DeepfakeForensicsResult {
   targetName: string;
   mediaType: 'image' | 'audio' | 'video' | 'synthetic_identity';
+  fileSizeBytes?: number;
+  sha256Hash?: string;
+  md5Hash?: string;
+  entropy?: number;
+  detectedFormat?: string;
   syntheticConfidence: number; // 0 (100% Authentic) to 100 (100% Generative Synthetic)
   classification: 'AUTHENTIC_ORIGINAL' | 'SUSPICIOUS_HYBRID' | 'SYNTHETIC_DEEPFAKE' | 'VOICE_CLONE_INJECTION';
   spectralAnomalyScore: number; // FFT frequency phase distortion
@@ -254,6 +259,7 @@ export interface DeepfakeForensicsResult {
   rppgConfidence: number;
   voiceJitterVariance?: number;
   detectedGenerativeArchetype: string; // e.g., 'Diffusion Latent Warp v8', 'Neural Voice Formant Synth'
+  generativeMetadataDetected?: string[];
   redFlags: string[];
   forensicEvidence: { metric: string; measured: string; baseline: string; status: 'clean' | 'anomaly' }[];
   mitreAtlasTechnique: string;
