@@ -3,7 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import dns from 'dns/promises';
 import tls from 'tls';
+import net from 'net';
 import { validateUrlSsrf, isPrivateOrReservedIpv4, isPrivateOrReservedIpv6 } from './security';
+import { lookupIpIntelligence, GeoIpResult } from './services/geoIpService';
+import { searchCveIntelligence, getLocalNvdDatabase, NormalizedCve } from './services/cveIndexService';
+import { auditEmailBreaches, RealBreachRecord } from './services/breachService';
+
 
 /**
  * CYBERGUARD CORE DETERMINISTIC THREAT ENGINE
@@ -143,85 +148,22 @@ export const VERIFIED_BREACH_DB: Breach[] = [
 
 /**
  * Deterministic Email Breach Evaluator
- * Audits an email address using transparent mathematical point scoring.
+ * Audits an email address using transparent mathematical point scoring and live verified repositories.
  */
-export function lookupEmailBreaches(cleanEmail: string): {
+export async function lookupEmailBreaches(cleanEmail: string): Promise<{
   breaches: Breach[];
   riskScore: number;
   scoreBreakdown: { rule: string; points: number }[];
-} {
-  const isSafeDomain = cleanEmail.endsWith('@cyberguard.gov') || 
-                       cleanEmail.endsWith('@cyberguard.com') || 
-                       cleanEmail.includes('secure-verified');
-
-  if (isSafeDomain) {
-    return {
-      breaches: [],
-      riskScore: 0,
-      scoreBreakdown: [{ rule: 'Verified Secure Organization Baseline', points: 0 }]
-    };
-  }
-
-  // Deterministic matching based on target email and public leak records
-  const matchedBreaches: Breach[] = [];
-  const domain = cleanEmail.split('@')[1] || '';
-
-  // Match known enterprise domain incidents or target matches
-  for (const b of VERIFIED_BREACH_DB) {
-    if (domain === b.Domain || cleanEmail.includes(b.Domain.split('.')[0])) {
-      matchedBreaches.push({
-        ...b,
-        id: `b-${b.Domain.replace(/\./g, '-')}-${Date.now()}`,
-        targetEmail: cleanEmail
-      });
-    }
-  }
-
-  // If no direct domain match, return clean baseline without fabricating records
-  if (matchedBreaches.length === 0) {
-    return {
-      breaches: [],
-      riskScore: 0,
-      scoreBreakdown: [{ rule: 'Verified Clean Repository Baseline (0 leaks detected)', points: 0 }]
-    };
-  }
-
-  // Calculate Deterministic Score
-  const scoreBreakdown: { rule: string; points: number }[] = [];
-  let totalScore = 0;
-
-  for (const b of matchedBreaches) {
-    // 1. Severity points
-    let sevPoints = 15;
-    if (b.severity === 'critical') sevPoints = 35;
-    else if (b.severity === 'high') sevPoints = 25;
-    else if (b.severity === 'medium') sevPoints = 15;
-    else if (b.severity === 'low') sevPoints = 5;
-
-    totalScore += sevPoints;
-    scoreBreakdown.push({ rule: `Breach: ${b.Title} (${b.severity.toUpperCase()} severity)`, points: sevPoints });
-
-    // 2. High-risk data class points
-    const dataClasses = b.DataClasses || [];
-    if (dataClasses.some(dc => dc.toLowerCase().includes('password'))) {
-      totalScore += 15;
-      scoreBreakdown.push({ rule: `Exposed Passwords in ${b.Title}`, points: 15 });
-    }
-    if (dataClasses.some(dc => dc.toLowerCase().includes('card') || dc.toLowerCase().includes('financial'))) {
-      totalScore += 20;
-      scoreBreakdown.push({ rule: `Exposed Financial/Card Data in ${b.Title}`, points: 20 });
-    }
-    if (dataClasses.some(dc => dc.toLowerCase().includes('security question'))) {
-      totalScore += 10;
-      scoreBreakdown.push({ rule: `Exposed Security Questions in ${b.Title}`, points: 10 });
-    }
-  }
-
-  const riskScore = Math.min(100, Math.max(0, totalScore));
+  status?: string;
+  source?: string;
+}> {
+  const result = await auditEmailBreaches(cleanEmail);
   return {
-    breaches: matchedBreaches,
-    riskScore,
-    scoreBreakdown
+    breaches: result.breaches as any,
+    riskScore: result.riskScore,
+    scoreBreakdown: result.scoreBreakdown,
+    status: result.status,
+    source: result.source
   };
 }
 
@@ -475,135 +417,11 @@ export const PREINDEXED_CVES: CveRecord[] = [
 
 export async function searchCves(query: string, severity = 'ALL', limit = 20): Promise<{
   totalMatches: number;
-  cves: (CveRecord & {
-    cpeConfigurations?: string[];
-    vectorExplanation?: Record<string, string>;
-    advisoryDisclaimer?: string;
-  })[];
+  cves: any[];
   source?: string;
+  limitations?: string;
 }> {
-  const cleanQ = (query || '').toLowerCase().trim();
-  const isExactCveId = /^cve-\d{4}-\d{4,7}$/i.test(cleanQ);
-
-  const parseCvssVector = (vectorString?: string): Record<string, string> => {
-    if (!vectorString) return {};
-    const parsed: Record<string, string> = {};
-    const parts = vectorString.split('/');
-    for (const p of parts) {
-      const [k, v] = p.split(':');
-      if (k === 'AV') parsed['Attack Vector'] = v === 'N' ? 'Network (Remote)' : (v === 'A' ? 'Adjacent Network' : (v === 'L' ? 'Local System' : 'Physical'));
-      if (k === 'AC') parsed['Attack Complexity'] = v === 'L' ? 'Low (Trivial)' : 'High (Special Conditions)';
-      if (k === 'PR') parsed['Privileges Required'] = v === 'N' ? 'None (Unauthenticated)' : (v === 'L' ? 'Low (User)' : 'High (Admin)');
-      if (k === 'UI') parsed['User Interaction'] = v === 'N' ? 'None (Autonomous)' : 'Required (Victim Interaction)';
-      if (k === 'S') parsed['Scope'] = v === 'C' ? 'Changed (Cross-Boundary)' : 'Unchanged';
-      if (k === 'C') parsed['Confidentiality Impact'] = v === 'H' ? 'High (Full Exposure)' : (v === 'L' ? 'Low' : 'None');
-      if (k === 'I') parsed['Integrity Impact'] = v === 'H' ? 'High (Data Modification)' : (v === 'L' ? 'Low' : 'None');
-      if (k === 'A') parsed['Availability Impact'] = v === 'H' ? 'High (Total Denial of Service)' : (v === 'L' ? 'Low' : 'None');
-    }
-    return parsed;
-  };
-
-  // 1. Live NIST NVD API search if query provided
-  if (cleanQ) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 2800);
-      const url = isExactCveId
-        ? `https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${encodeURIComponent(cleanQ.toUpperCase())}`
-        : `https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=${encodeURIComponent(cleanQ)}&resultsPerPage=${limit}`;
-      
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
-      if (res.ok) {
-        const json = await res.json();
-        const vulns = json.vulnerabilities || [];
-        const liveCves: any[] = [];
-        for (const item of vulns) {
-          const cve = item.cve;
-          if (!cve?.id) continue;
-          const descObj = cve.descriptions?.find((d: any) => d.lang === 'en') || cve.descriptions?.[0];
-          const cvss = cve.metrics?.cvssMetricV31?.[0]?.cvssData || cve.metrics?.cvssMetricV30?.[0]?.cvssData || cve.metrics?.cvssMetricV2?.[0]?.cvssData;
-          const score = cvss?.baseScore || 5.0;
-          let sev: CveRecord['severity'] = 'MEDIUM';
-          if (score >= 9.0) sev = 'CRITICAL';
-          else if (score >= 7.0) sev = 'HIGH';
-          else if (score >= 4.0) sev = 'MEDIUM';
-          else sev = 'LOW';
-
-          // Extract affected CPE configurations where available
-          const cpeList: string[] = [];
-          if (Array.isArray(cve.configurations)) {
-            for (const config of cve.configurations) {
-              if (Array.isArray(config.nodes)) {
-                for (const node of config.nodes) {
-                  if (Array.isArray(node.cpeMatch)) {
-                    for (const match of node.cpeMatch) {
-                      if (match.criteria && cpeList.length < 5) {
-                        cpeList.push(match.criteria);
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          liveCves.push({
-            id: cve.id,
-            sourceIdentifier: cve.sourceIdentifier || 'nvd@nist.gov',
-            published: cve.published || '',
-            lastModified: cve.lastModified || '',
-            vulnStatus: cve.vulnStatus || 'Analyzed',
-            description: descObj?.value || 'No description available',
-            severity: sev,
-            score,
-            vectorString: cvss?.vectorString,
-            vectorExplanation: parseCvssVector(cvss?.vectorString),
-            cpeConfigurations: cpeList,
-            advisoryDisclaimer: 'Authoritative vulnerability intelligence advisory (NVD). Confirmation of asset compromise requires validating installed package versions and configuration exposure.'
-          });
-        }
-        if (liveCves.length > 0) {
-          let filtered = liveCves;
-          if (severity && severity.toUpperCase() !== 'ALL') {
-            filtered = filtered.filter(c => c.severity === severity.toUpperCase());
-          }
-          if (filtered.length > 0) {
-            return {
-              totalMatches: filtered.length,
-              cves: filtered.slice(0, limit),
-              source: 'NIST National Vulnerability Database (NVD v2.0 Live Query)'
-            };
-          }
-        }
-      }
-    } catch {}
-  }
-
-  // 2. Fallback pre-indexed matching with enriched advisory fields
-  let matches = PREINDEXED_CVES.map(c => ({
-    ...c,
-    vectorExplanation: parseCvssVector(c.vectorString),
-    cpeConfigurations: [`cpe:2.3:a:*:${c.id.toLowerCase()}:*:*:*:*:*:*:*`],
-    advisoryDisclaimer: 'Authoritative vulnerability intelligence advisory (NVD). Confirmation of asset compromise requires validating installed package versions and configuration exposure.'
-  }));
-
-  if (cleanQ) {
-    matches = matches.filter(c => 
-      c.id.toLowerCase().includes(cleanQ) || 
-      c.description.toLowerCase().includes(cleanQ) ||
-      c.sourceIdentifier.toLowerCase().includes(cleanQ)
-    );
-  }
-  if (severity && severity.toUpperCase() !== 'ALL') {
-    matches = matches.filter(c => c.severity === severity.toUpperCase());
-  }
-
-  return {
-    totalMatches: matches.length,
-    cves: matches.slice(0, limit),
-    source: 'CyberGuard Authoritative Vulnerability Ledger'
-  };
+  return await searchCveIntelligence(query, severity, limit);
 }
 
 // ---------------------------------------------------------------------
@@ -715,6 +533,28 @@ export async function analyzeUrl(rawUrl: string): Promise<{
         verdict: 'malicious',
         confidence: 'high',
         limitations: 'Target string could not be parsed as a valid RFC 3986 URL.'
+      }
+    };
+  }
+
+  // Validate hostname has a dot or is localhost/valid IP
+  const hasValidHostname = parsed.hostname && (parsed.hostname.includes('.') || parsed.hostname === 'localhost' || /^(\d{1,3}\.){3}\d{1,3}$/.test(parsed.hostname));
+  if (!hasValidHostname) {
+    const malformedSummary = '### 🔍 CyberGuard Forensic Inspection\n\n**Result**: Target fails RFC 3986 URL validation syntax (missing valid domain or TLD).';
+    return {
+      riskScore: 85,
+      threats: ['Malformed or invalid URL syntax (invalid host or missing TLD)'],
+      forensicSummary: malformedSummary,
+      aiSummary: malformedSummary,
+      detectedThreats: ['Malformed URL syntax (invalid host or missing TLD)'],
+      scoreBreakdown: [{ rule: 'Malformed URL Syntax (Invalid Host)', points: 85 }],
+      evidence: {
+        observed: { rawInput: rawUrl },
+        heuristic: { invalidSyntax: true },
+        externallyVerified: {},
+        verdict: 'suspicious',
+        confidence: 'high',
+        limitations: 'Target string does not contain a valid hostname or top-level domain.'
       }
     };
   }
@@ -1105,46 +945,77 @@ export async function analyzeHash(
   };
 }
 
+// Helper to probe TCP ports safely with a strict non-blocking timeout
+async function probeTcpPort(host: string, port: number, timeoutMs: number = 800): Promise<'open' | 'closed'> {
+  if (isPrivateOrReservedIpv4(host) || isPrivateOrReservedIpv6(host) || host === 'localhost' || host === '127.0.0.1') {
+    return 'closed';
+  }
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve('open');
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve('closed');
+    });
+    socket.once('error', () => {
+      socket.destroy();
+      resolve('closed');
+    });
+    socket.connect(port, host);
+  });
+}
+
 // ---------------------------------------------------------------------
 // 8. EVIDENCE-BASED OSINT & INFRASTRUCTURE INSPECTOR
 // ---------------------------------------------------------------------
 export async function analyzeOsint(target: string): Promise<any> {
   const cleanTarget = target.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
   const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(cleanTarget);
+  const timestamp = new Date().toISOString();
 
   // SSRF Protection: Check if target IP is in a private RFC1918 or loopback range
   if (isIp && isPrivateOrReservedIpv4(cleanTarget)) {
     return {
       target: cleanTarget,
+      isIp: true,
       resolvedIp: cleanTarget,
       hostname: 'internal-private-host.local',
       location: {
-        country: 'Internal / RFC 1918',
-        city: 'Private Network',
-        isp: 'Local Enterprise Subnet',
+        country: 'Private Network / RFC 1918',
+        countryCode: 'XX',
+        region: 'Internal Subnet',
+        city: 'Non-Routable',
+        isp: 'Local Enterprise Network',
         asn: 'N/A (Private)',
-        flag: '🔒'
+        flag: '🔒',
+        isHostingOrCdn: false,
+        source: 'CyberGuard Local RFC Guard'
       },
       reputationScore: 0,
       scoreBreakdown: [{ rule: 'RFC 1918 Private Non-Routable Network Address', points: 0 }],
       blacklists: [
-        { name: 'VirusTotal ThreatDB', listed: false, category: 'Private IP' },
-        { name: 'Spamhaus Zen', listed: false, category: 'Non-Routable Subnet' }
+        { name: 'VirusTotal ThreatDB', listed: false, category: 'Private IP' }
       ],
       openPorts: [],
       dnsRecords: [],
       threatCategories: ['Internal Private Asset'],
       investigatorNotes: `Target ${cleanTarget} is a non-routable private network address (RFC 1918 / Loopback). External public OSINT lookups are not applicable.`,
-      timestamp: new Date().toISOString()
+      timestamp
     };
   }
 
-  // 1. Live DNS Queries
-  let realA: string[] = [];
+  let resolvedIp = cleanTarget;
+  let allResolvedIps: string[] = [];
   let realMx: any[] = [];
   let realTxt: string[][] = [];
   let realNs: string[] = [];
   let reverseHost: string | null = null;
+  let rdapRegistrar: string | null = null;
+  let domainAgeDays: number | null = null;
 
   if (isIp) {
     try {
@@ -1152,8 +1023,10 @@ export async function analyzeOsint(target: string): Promise<any> {
       if (ptrs.length > 0) reverseHost = ptrs[0];
     } catch {}
   } else {
+    // 1. Live DNS Queries for Domain
     try {
-      realA = await dns.resolve4(cleanTarget);
+      allResolvedIps = await dns.resolve4(cleanTarget);
+      resolvedIp = allResolvedIps[0] || '';
     } catch {}
     try {
       realMx = await dns.resolveMx(cleanTarget);
@@ -1164,84 +1037,171 @@ export async function analyzeOsint(target: string): Promise<any> {
     try {
       realNs = await dns.resolveNs(cleanTarget);
     } catch {}
+
+    // 2. Query RDAP for domain registration & age
+    try {
+      const rdapRes = await fetch(`https://rdap.org/domain/${cleanTarget}`, {
+        headers: { 'Accept': 'application/rdap+json' },
+        signal: AbortSignal.timeout(2500)
+      });
+      if (rdapRes.ok) {
+        const rdapData = await rdapRes.json();
+        const events = rdapData.events || [];
+        const regEvent = events.find((e: any) => e.eventAction === 'registration');
+        if (regEvent && regEvent.eventDate) {
+          const regDate = new Date(regEvent.eventDate);
+          domainAgeDays = Math.max(0, Math.floor((Date.now() - regDate.getTime()) / (1000 * 60 * 60 * 24)));
+        }
+        const registrarEntity = rdapData.entities?.find((e: any) => e.roles?.includes('registrar'));
+        rdapRegistrar = registrarEntity?.vcardArray?.[1]?.find((v: any) => v[0] === 'fn')?.[3] || null;
+      }
+    } catch {}
   }
 
-  // 2. Live VirusTotal IP / Domain Lookup
+  // 3. Authoritative IP Geolocation & Network Telemetry
+  // If target was a domain, we geolocate the RESOLVED IP (realA[0]), NOT the domain name!
+  const ipToGeolocate = isIp ? cleanTarget : resolvedIp;
+  let geoResult: GeoIpResult;
+  if (ipToGeolocate) {
+    geoResult = await lookupIpIntelligence(ipToGeolocate);
+  } else {
+    geoResult = {
+      ip: 'Unresolved',
+      country: 'DNS Unresolved',
+      countryCode: 'XX',
+      region: 'None',
+      city: 'Unresolved',
+      flag: '❓',
+      isHostingOrCdn: false,
+      source: 'DNS Resolution Failed',
+      timestamp,
+      limitations: `Could not resolve domain "${cleanTarget}" to an IPv4 address.`
+    };
+  }
+
+  // 4. Real TCP Port Probes (Non-blocking check on ports 80 & 443 with 800ms timeout)
+  let port80Status: 'open' | 'closed' = 'closed';
+  let port443Status: 'open' | 'closed' = 'closed';
+  if (ipToGeolocate && !geoResult.country.includes('Private')) {
+    const [p80, p443] = await Promise.all([
+      probeTcpPort(ipToGeolocate, 80, 800),
+      probeTcpPort(ipToGeolocate, 443, 800)
+    ]);
+    port80Status = p80;
+    port443Status = p443;
+  }
+
+  // 5. Live VirusTotal Threat Query
   const vtResult = await queryVirusTotalIp(cleanTarget);
   const scoreBreakdown: { rule: string; points: number }[] = [];
   let score = 5;
   scoreBreakdown.push({ rule: 'Baseline Infrastructure Audit', points: 5 });
 
   if (vtResult && vtResult.matched) {
-    const vtPoints = Math.min(50, vtResult.maliciousCount * 10 + vtResult.suspiciousCount * 5);
+    const vtPoints = Math.min(60, vtResult.maliciousCount * 12 + vtResult.suspiciousCount * 6);
     score += vtPoints;
-    scoreBreakdown.push({ rule: `VirusTotal Flags (${vtResult.maliciousCount} AV engines)`, points: vtPoints });
+    scoreBreakdown.push({ rule: `VirusTotal Verified Threats (${vtResult.maliciousCount} AV engines)`, points: vtPoints });
   }
 
-  const isListedSpamhaus = vtResult ? vtResult.maliciousCount >= 3 : false;
-  const isListedAbuseIp = vtResult ? vtResult.maliciousCount >= 2 : false;
-  const isListedQuad9 = vtResult ? vtResult.maliciousCount >= 5 : false;
-
-  if (isListedSpamhaus) {
-    score += 15;
-    scoreBreakdown.push({ rule: 'Spamhaus Zen Threat Flag', points: 15 });
-  }
-  if (isListedAbuseIp) {
-    score += 15;
-    scoreBreakdown.push({ rule: 'AbuseIPDB ThreatDB Listing', points: 15 });
+  if (domainAgeDays !== null && domainAgeDays < 30) {
+    score += 25;
+    scoreBreakdown.push({ rule: `Newly Registered Domain (${domainAgeDays} days old)`, points: 25 });
   }
 
   const finalScore = Math.min(100, Math.max(5, score));
-  const resolvedIp = isIp ? cleanTarget : (realA[0] || 'Unresolved (DNS Offline)');
 
   // Build authentic DNS records
   const dnsRecordsFormatted: { type: string; value: string; status: 'ok' | 'warning' | 'missing' }[] = [];
-  if (realA.length > 0) {
-    realA.forEach(ip => dnsRecordsFormatted.push({ type: 'A', value: ip, status: 'ok' }));
+  if (allResolvedIps.length > 0) {
+    allResolvedIps.forEach(ip => dnsRecordsFormatted.push({ type: 'A', value: ip, status: 'ok' }));
   }
   if (realMx.length > 0) {
-    realMx.slice(0, 2).forEach(mx => dnsRecordsFormatted.push({ type: 'MX', value: `${mx.exchange} (pri: ${mx.priority})`, status: 'ok' }));
+    realMx.slice(0, 3).forEach(mx => dnsRecordsFormatted.push({ type: 'MX', value: `${mx.exchange} (pri: ${mx.priority})`, status: 'ok' }));
   }
   if (realTxt.length > 0) {
-    realTxt.slice(0, 2).forEach(t => dnsRecordsFormatted.push({ type: 'TXT', value: t.join(' ').slice(0, 60), status: 'ok' }));
+    realTxt.slice(0, 3).forEach(t => dnsRecordsFormatted.push({ type: 'TXT', value: t.join(' ').slice(0, 80), status: 'ok' }));
   }
   if (realNs.length > 0) {
-    realNs.slice(0, 2).forEach(ns => dnsRecordsFormatted.push({ type: 'NS', value: ns, status: 'ok' }));
+    realNs.slice(0, 3).forEach(ns => dnsRecordsFormatted.push({ type: 'NS', value: ns, status: 'ok' }));
+  }
+  if (dnsRecordsFormatted.length === 0) {
+    dnsRecordsFormatted.push({ type: isIp ? 'PTR' : 'A', value: reverseHost || geoResult.reverseDns || resolvedIp || 'Unresolved', status: 'ok' });
   }
 
-  if (dnsRecordsFormatted.length === 0) {
-    dnsRecordsFormatted.push({ type: isIp ? 'PTR' : 'A', value: reverseHost || resolvedIp, status: 'ok' });
+  // Build Edge / CDN Notice
+  let edgeNotice = '';
+  if (!isIp && geoResult.isHostingOrCdn) {
+    edgeNotice = `Domain routes through edge infrastructure (${geoResult.cdnProvider || geoResult.asOwner || 'CDN/Cloud Anycast'}). The geolocated country (${geoResult.country}) represents the Anycast edge node, which may differ from the origin hosting facility.`;
   }
+
+  // Genuine Open Ports array
+  const openPortsList: { port: number; service: string; state: 'open' | 'closed'; risk: 'low' | 'medium' | 'high' }[] = [
+    { port: 80, service: 'HTTP', state: port80Status, risk: 'low' },
+    { port: 443, service: 'HTTPS / TLS', state: port443Status, risk: 'low' }
+  ];
 
   return {
     target: cleanTarget,
-    resolvedIp,
-    hostname: isIp ? (reverseHost || `host-${cleanTarget.replace(/\./g, '-')}.net`) : cleanTarget,
+    isIp,
+    resolvedIp: resolvedIp || (isIp ? cleanTarget : 'Unresolved'),
+    allResolvedIps: allResolvedIps.length > 0 ? allResolvedIps : (isIp ? [cleanTarget] : []),
+    hostname: isIp ? (reverseHost || geoResult.reverseDns || cleanTarget) : cleanTarget,
+    reverseDns: reverseHost || geoResult.reverseDns,
     location: {
-      country: vtResult?.country || (isIp ? 'International Network' : 'Global CDN'),
-      city: isIp ? 'Edge Hub' : 'Multi-Region',
-      isp: vtResult?.asOwner || 'Authoritative Network Provider',
-      asn: vtResult?.asOwner ? `AS-${vtResult.asOwner.split(' ')[0]}` : 'AS-Transit',
-      flag: '🌐'
+      country: geoResult.country,
+      countryCode: geoResult.countryCode,
+      region: geoResult.region,
+      city: geoResult.city,
+      isp: geoResult.isp || geoResult.asOwner || 'Authoritative Provider',
+      asn: geoResult.asn || 'AS-Unspecified',
+      organization: geoResult.organization,
+      flag: geoResult.flag || '🌐',
+      isHostingOrCdn: geoResult.isHostingOrCdn,
+      cdnProvider: geoResult.cdnProvider,
+      source: geoResult.source
     },
+    domainRegistration: !isIp ? {
+      registrar: rdapRegistrar || 'Public Registration',
+      domainAgeDays: domainAgeDays !== null ? domainAgeDays : undefined
+    } : undefined,
     reputationScore: finalScore,
     scoreBreakdown,
     blacklists: [
-      { name: 'VirusTotal ThreatDB', listed: vtResult ? vtResult.maliciousCount > 0 : false, category: 'Multi-Engine AV Threat' },
-      { name: 'Spamhaus Zen', listed: isListedSpamhaus, category: 'Spam & Exploit Host' },
-      { name: 'AbuseIPDB ThreatDB', listed: isListedAbuseIp, category: 'Brute Force & Scan' },
-      { name: 'Quad9 Security Filter', listed: isListedQuad9, category: 'Phishing C2' }
+      {
+        name: 'VirusTotal Threat Intelligence',
+        listed: vtResult ? vtResult.maliciousCount > 0 : false,
+        category: vtResult && vtResult.maliciousCount > 0 ? `${vtResult.maliciousCount}/${vtResult.totalEngines} AV Engines Flagged` : 'Clean / Unlisted'
+      }
     ],
-    openPorts: [
-      { port: 80, service: 'HTTP', state: 'open' as const, risk: 'low' as const },
-      { port: 443, service: 'HTTPS / TLS 1.3', state: 'open' as const, risk: 'low' as const }
-    ],
+    openPorts: openPortsList,
     dnsRecords: dnsRecordsFormatted,
     threatCategories: finalScore >= 50
-      ? ['High Risk Infrastructure', 'Anomalous Threat Detections']
-      : ['Standard Internet Asset', 'Verified Routing'],
-    investigatorNotes: `Observed OSINT Telemetry compiled on ${new Date().toISOString()} via CyberGuard Deterministic Engine.${vtResult && vtResult.matched ? ` VirusTotal flagged ${vtResult.maliciousCount}/${vtResult.totalEngines} detections.` : ''} Threat score evaluated at ${finalScore}/100.`,
-    timestamp: new Date().toISOString()
+      ? ['High Risk Infrastructure', 'Confirmed Threat Indicators']
+      : (geoResult.isHostingOrCdn ? ['Anycast CDN / Edge Proxy', 'Verified Routing'] : ['Standard Internet Asset', 'Verified Routing']),
+    investigatorNotes: `Observed OSINT Telemetry compiled on ${timestamp} via CyberGuard Deterministic Engine. ` +
+      `IP Geolocation Source: ${geoResult.source}. ` +
+      (edgeNotice ? `${edgeNotice} ` : '') +
+      (vtResult && vtResult.matched ? `VirusTotal flagged ${vtResult.maliciousCount}/${vtResult.totalEngines} vendor detections. ` : 'No active threat flags detected on VirusTotal. ') +
+      `Threat score evaluated at ${finalScore}/100.`,
+    evidence: {
+      indicator: cleanTarget,
+      indicatorType: isIp ? 'ipv4' : 'domain',
+      resolvedIp: resolvedIp || cleanTarget,
+      geolocationSource: geoResult.source,
+      geoResult,
+      dnsSummary: {
+        aCount: allResolvedIps.length,
+        mxCount: realMx.length,
+        txtCount: realTxt.length,
+        nsCount: realNs.length
+      },
+      portsTested: [
+        { port: 80, state: port80Status },
+        { port: 443, state: port443Status }
+      ],
+      limitations: geoResult.limitations
+    },
+    timestamp
   };
 }
 
@@ -1485,63 +1445,20 @@ export function analyzeDeepfakeMedia(targetName: string, mediaType: string = 'im
     }
   }
 
-  const isAudio = mediaType === 'audio' || nameClean.endsWith('.mp3') || nameClean.endsWith('.wav') || nameClean.includes('voice') || detectedFormat === 'MP3' || detectedFormat === 'WAV';
-  const isVideo = mediaType === 'video' || nameClean.endsWith('.mp4') || nameClean.endsWith('.webm') || nameClean.includes('video') || nameClean.includes('stream') || detectedFormat === 'MP4';
+  const isAudio = mediaType === 'audio' || nameClean.endsWith('.mp3') || nameClean.endsWith('.wav') || detectedFormat === 'MP3' || detectedFormat === 'WAV';
+  const isVideo = mediaType === 'video' || nameClean.endsWith('.mp4') || nameClean.endsWith('.webm') || detectedFormat === 'MP4';
 
   const hasGenerativeMetadata = generativeMetadataDetected.length > 0;
-  const isSyntheticFlag = hasGenerativeMetadata || nameClean.includes('synth') || nameClean.includes('deepfake') || nameClean.includes('clone') || nameClean.includes('ai') || nameClean.includes('gen') || nameClean.includes('sample');
-  const isCleanOriginal = !hasGenerativeMetadata && (nameClean.includes('clean') || nameClean.includes('original') || nameClean.includes('authentic') || nameClean.includes('lead'));
-
-  let syntheticConfidence = 0;
-  let classification: 'AUTHENTIC_ORIGINAL' | 'SUSPICIOUS_HYBRID' | 'SYNTHETIC_DEEPFAKE' | 'VOICE_CLONE_INJECTION' = 'AUTHENTIC_ORIGINAL';
-  let spectralAnomalyScore = 0;
-  let rppgPulseDetected = true;
-  let rppgConfidence = 98;
   const redFlags: string[] = [];
 
   if (hasGenerativeMetadata) {
-    syntheticConfidence = isAudio ? 97 : 98;
-    classification = isAudio ? 'VOICE_CLONE_INJECTION' : 'SYNTHETIC_DEEPFAKE';
-    spectralAnomalyScore = 92.4;
-    rppgPulseDetected = false;
-    rppgConfidence = 6.2;
-    redFlags.push(`Embedded AI Generative Metadata Discovered: Found parameter signatures (${generativeMetadataDetected.join(', ')}).`);
-    redFlags.push('FFT Spectral Phase Checkerboard: High-frequency transposing artifacts confirmed across latent lattice.');
-    redFlags.push('Synthetic Biological Failure: Remote Photoplethysmography (rPPG) detected zero subdermal blood flow pulsation.');
-  } else if (isSyntheticFlag && !isCleanOriginal) {
-    syntheticConfidence = isAudio ? 94 : 96;
-    classification = isAudio ? 'VOICE_CLONE_INJECTION' : 'SYNTHETIC_DEEPFAKE';
-    spectralAnomalyScore = 88.5;
-    rppgPulseDetected = false;
-    rppgConfidence = 12.4;
-
-    if (isAudio) {
-      redFlags.push('Neural Voice Formant Jitter: Unnatural phase coherence detected in high-frequency spectrum (4kHz-8kHz).');
-      redFlags.push('Zero Micro-Involuntary Breaths: Waveform exhibits discontinuous zero-crossing spectral cuts.');
-      redFlags.push('Synthetic Prosody Archetype: Matches XTTS-v3 / Neural-Voice-Clone 2030 latent model signature.');
-    } else {
-      redFlags.push('FFT Spectral Checkerboard Anomaly: Periodic Fourier peaks indicating transposed convolution upsampling.');
-      redFlags.push('Synthetic Biological Failure: Remote Photoplethysmography (rPPG) detected zero subdermal blood pulse hemoglobin variation.');
-      redFlags.push('Pupillary & Iris Geometry Disparity: Corneal reflection ray-tracing inconsistency (> 28° deviation).');
-      redFlags.push('Latent Warp Boundary: High-gradient blur artifacts detected along facial perimeter mesh.');
-    }
-  } else if (!isCleanOriginal) {
-    syntheticConfidence = 45;
-    classification = 'SUSPICIOUS_HYBRID';
-    spectralAnomalyScore = 42.0;
-    rppgPulseDetected = true;
-    rppgConfidence = 64.0;
-    redFlags.push('Minor high-frequency compression artifacts observed; biological vitals within acceptable margins.');
-  } else {
-    syntheticConfidence = 4;
-    classification = 'AUTHENTIC_ORIGINAL';
-    spectralAnomalyScore = 3.2;
-    rppgPulseDetected = true;
-    rppgConfidence = 99.1;
+    redFlags.push(`Embedded AI Generator Signatures: File header contains generative parameters (${generativeMetadataDetected.join(', ')}).`);
   }
 
+  const timestamp = new Date().toISOString();
+
   return {
-    targetName: targetName || 'executive_media_artifact.png',
+    targetName: targetName || 'uploaded_media_payload.bin',
     mediaType: isAudio ? 'audio' : (isVideo ? 'video' : 'image'),
     fileSizeBytes,
     sha256Hash,
@@ -1549,24 +1466,47 @@ export function analyzeDeepfakeMedia(targetName: string, mediaType: string = 'im
     entropy,
     detectedFormat: detectedFormat !== 'UNKNOWN' ? detectedFormat : undefined,
     generativeMetadataDetected: generativeMetadataDetected.length > 0 ? generativeMetadataDetected : undefined,
-    syntheticConfidence,
-    classification,
-    spectralAnomalyScore,
-    rppgPulseDetected,
-    rppgConfidence,
-    voiceJitterVariance: isAudio ? (syntheticConfidence > 80 ? 0.042 : 0.884) : undefined,
-    detectedGenerativeArchetype: syntheticConfidence > 80 
-      ? (isAudio ? 'Generative Neural Voice Clone (Diffusion-Acoustic v4)' : 'Generative Diffusion Latent Mesh (SD-Next 2030)') 
-      : 'Natural Sensor Photon Stream (Sony Exmor Sensor / Electro-Dynamic Mic)',
+    classification: hasGenerativeMetadata ? 'METADATA_AI_INDICATOR' : 'UNVERIFIED_NO_INFERENCE_ENGINE',
+    modelStatus: 'UNAVAILABLE / NOT CONFIGURED',
+    syntheticConfidence: null,
+    spectralAnomalyScore: null,
+    rppgPulseDetected: null,
+    rppgConfidence: null,
+    detectedGenerativeArchetype: hasGenerativeMetadata 
+      ? `AI Tool Parameters Identified: ${generativeMetadataDetected[0]}` 
+      : 'Neural Deepfake Classification Model Not Configured',
     redFlags,
     forensicEvidence: [
-      { metric: 'FFT Frequency Phase Coherence', measured: `${spectralAnomalyScore}% Anomaly`, baseline: '< 10% Normal', status: spectralAnomalyScore > 30 ? 'anomaly' : 'clean' },
-      { metric: 'rPPG Subdermal Pulse Variance', measured: rppgPulseDetected ? `${rppgConfidence}% Verified Bio-Pulse` : '0% (Dead Synthetic Signal)', baseline: '> 85% Natural', status: rppgPulseDetected ? 'clean' : 'anomaly' },
-      { metric: 'Corneal Ray-Tracing Saliency', measured: syntheticConfidence > 70 ? 'Inconsistent Multi-Source Glint' : 'Parallax Symmetrical', baseline: 'Coherent Ambient Match', status: syntheticConfidence > 70 ? 'anomaly' : 'clean' },
-      { metric: 'Audio Formant Phase Entropy', measured: isAudio ? (syntheticConfidence > 70 ? '3.12 Bits (Artificial)' : '7.45 Bits (Organic)') : 'N/A (Visual Mode)', baseline: '> 7.0 Bits Organic', status: (isAudio && syntheticConfidence > 70) ? 'anomaly' : 'clean' }
+      {
+        metric: 'Cryptographic SHA-256 Hash',
+        measured: sha256Hash ? `${sha256Hash.substring(0, 16)}...` : 'Not computed',
+        baseline: 'Deterministic 256-bit hash',
+        status: sha256Hash ? 'clean' : 'anomaly'
+      },
+      {
+        metric: 'Shannon Information Entropy',
+        measured: entropy !== undefined ? `${entropy} / 8.00` : 'Not measured',
+        baseline: 'Uncompressed binary density',
+        status: 'clean'
+      },
+      {
+        metric: 'Magic Byte File Format',
+        measured: detectedFormat !== 'UNKNOWN' ? `${detectedFormat} Verified` : 'Unrecognized Container',
+        baseline: 'Valid RFC MIME magic bytes',
+        status: detectedFormat !== 'UNKNOWN' ? 'clean' : 'anomaly'
+      },
+      {
+        metric: 'Generative AI Metadata Tags',
+        measured: hasGenerativeMetadata ? `Flagged (${generativeMetadataDetected.join(', ')})` : 'Zero Generative Signatures in Headers',
+        baseline: 'No generative prompt strings',
+        status: hasGenerativeMetadata ? 'anomaly' : 'clean'
+      }
     ],
-    mitreAtlasTechnique: isAudio ? 'AML.T0043.002 (Deepfake Audio Speech Synthesis)' : 'AML.T0043.001 (Generative Synthetic Visual Impersonation)',
-    timestamp: new Date().toISOString()
+    investigatorNotes: `Binary properties, SHA-256 hash, and EXIF/header strings were successfully inspected. ` +
+      `Neural deepfake classification model (e.g. FaceForensics++ / MesoNet) is NOT configured on this instance. ` +
+      `In adherence to CyberGuard zero-fabrication standards, no synthetic probability percentage was simulated.`,
+    limitations: 'Static binary heuristics only. Reliable deepfake detection requires an active GPU neural inference engine or third-party deepfake model API.',
+    timestamp
   };
 }
 

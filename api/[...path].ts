@@ -321,7 +321,7 @@ export default async function handler(req: any, res: any) {
       }
 
       const cleanEmail = email.trim().toLowerCase();
-      const breachResult = lookupEmailBreaches(cleanEmail);
+      const breachResult = await lookupEmailBreaches(cleanEmail);
       const forensicSummary = generateBreachReportSummary(cleanEmail, breachResult.breaches, breachResult.riskScore, breachResult.scoreBreakdown);
 
       const currentUser = getRequestUser(req);

@@ -377,17 +377,18 @@ export default function Dashboard({
           if (data.user) onUserUpdate(data.user);
           return data.scan;
         }
+      } else {
+        const errJson = await safeJsonResponse(res);
+        setUrlError(errJson?.error || `URL scan failed with HTTP ${res.status}`);
+        return null;
       }
     } catch (err: any) {
-      setUrlError(err.message || 'URL inspection failed.');
+      setUrlError(err.message || 'URL inspection request failed. Check server connectivity.');
+      return null;
     } finally {
       setUrlLoading(false);
     }
-
-    const local = clientAnalyzeUrl(url);
-    setCurrentScan(local.scan);
-    setScans(prev => [local.scan, ...prev]);
-    return local.scan;
+    return null;
   };
 
   const handleAnalyzeHash = async (hash: string, fileName?: string, filePayload?: string): Promise<HashAnalysisResult | null> => {
@@ -405,16 +406,18 @@ export default function Dashboard({
           setHashResult(data);
           return data;
         }
+      } else {
+        const errJson = await safeJsonResponse(res);
+        setHashError(errJson?.error || `Hash analysis failed with HTTP ${res.status}`);
+        return null;
       }
     } catch (err: any) {
-      setHashError(err.message || 'Hash lookup failed.');
+      setHashError(err.message || 'Hash lookup request failed. Check server connectivity.');
+      return null;
     } finally {
       setHashLoading(false);
     }
-
-    const local = clientAnalyzeHash(hash, fileName);
-    setHashResult(local);
-    return local;
+    return null;
   };
 
   const handleSearchCves = async (query: string, severity?: string) => {
@@ -456,16 +459,18 @@ export default function Dashboard({
           setOsintResult(data);
           return data;
         }
+      } else {
+        const errJson = await safeJsonResponse(res);
+        setOsintError(errJson?.error || `OSINT lookup failed with HTTP ${res.status}`);
+        return null;
       }
     } catch (err: any) {
-      setOsintError(err.message || 'OSINT lookup failed.');
+      setOsintError(err.message || 'OSINT lookup request failed. Check server connectivity.');
+      return null;
     } finally {
       setOsintLoading(false);
     }
-
-    const local = clientAnalyzeOsint(target);
-    setOsintResult(local);
-    return local;
+    return null;
   };
 
   const handleScanEmail = async (email: string): Promise<ScanResult | null> => {
@@ -485,17 +490,18 @@ export default function Dashboard({
           if (data.user) onUserUpdate(data.user);
           return data.scan;
         }
+      } else {
+        const errJson = await safeJsonResponse(res);
+        setError(errJson?.error || `Email breach audit failed with HTTP ${res.status}`);
+        return null;
       }
     } catch (err: any) {
-      setError(err.message || 'Email breach scan failed.');
+      setError(err.message || 'Email breach scan request failed. Check server connectivity.');
+      return null;
     } finally {
       setLoading(false);
     }
-
-    const local = clientLookupEmail(email);
-    setCurrentScan(local.scan);
-    setScans(prev => [local.scan, ...prev]);
-    return local.scan;
+    return null;
   };
 
   const handleCreateIncident = async (incidentData: Partial<SocIncident>) => {

@@ -362,47 +362,76 @@ export default function DeepfakeDetectionView({
 
                   <StatusBadge 
                     status={currentResult.classification} 
-                    severity={currentResult.syntheticConfidence > 70 ? 'critical' : (currentResult.syntheticConfidence > 30 ? 'high' : 'low')} 
+                    severity={
+                      currentResult.syntheticConfidence === null 
+                        ? (currentResult.generativeMetadataDetected && currentResult.generativeMetadataDetected.length > 0 ? 'high' : 'medium')
+                        : (currentResult.syntheticConfidence > 70 ? 'critical' : (currentResult.syntheticConfidence > 30 ? 'high' : 'low'))
+                    } 
                     size="md"
                   />
                 </div>
 
-                {/* Confidence Meter Bar */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center text-xs font-mono">
-                    <span className="text-slate-300">Synthetic Deepfake Probability:</span>
-                    <span className={`font-bold ${
-                      currentResult.syntheticConfidence > 70 ? 'text-red-400' : (currentResult.syntheticConfidence > 30 ? 'text-amber-400' : 'text-emerald-400')
-                    }`}>
-                      {currentResult.syntheticConfidence}% CONFIDENCE
-                    </span>
+                {/* Neural Model Status Notice if Unconfigured */}
+                {currentResult.syntheticConfidence === null && (
+                  <div className="p-3 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>NEURAL INFERENCE ENGINE NOT CONFIGURED</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 font-sans">
+                      Deep learning weights (PyTorch/ONNX) or external generative vision API are not configured. CyberGuard does not invent fake confidence percentages. Performed deterministic cryptographic hashing, Shannon entropy, magic byte verification, and embedded metadata inspection.
+                    </p>
                   </div>
-                  <div className="w-full h-2.5 bg-[#090D14] border border-[#1C273C] rounded-full overflow-hidden flex">
-                    <div 
-                      className={`h-full transition-all duration-500 ${
-                        currentResult.syntheticConfidence > 70 
-                          ? 'bg-gradient-to-r from-red-600 to-red-400 shadow-[0_0_10px_#EF4444]' 
-                          : (currentResult.syntheticConfidence > 30 
-                            ? 'bg-gradient-to-r from-amber-600 to-amber-400' 
-                            : 'bg-gradient-to-r from-emerald-600 to-emerald-400')
-                      }`}
-                      style={{ width: `${Math.max(currentResult.syntheticConfidence, 5)}%` }}
-                    />
+                )}
+
+                {/* Confidence Meter Bar (when model is configured) */}
+                {currentResult.syntheticConfidence !== null ? (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-xs font-mono">
+                      <span className="text-slate-300">Synthetic Deepfake Probability:</span>
+                      <span className={`font-bold ${
+                        currentResult.syntheticConfidence > 70 ? 'text-red-400' : (currentResult.syntheticConfidence > 30 ? 'text-amber-400' : 'text-emerald-400')
+                      }`}>
+                        {currentResult.syntheticConfidence}% CONFIDENCE
+                      </span>
+                    </div>
+                    <div className="w-full h-2.5 bg-[#090D14] border border-[#1C273C] rounded-full overflow-hidden flex">
+                      <div 
+                        className={`h-full transition-all duration-500 ${
+                          currentResult.syntheticConfidence > 70 
+                            ? 'bg-gradient-to-r from-red-600 to-red-400 shadow-[0_0_10px_#EF4444]' 
+                            : (currentResult.syntheticConfidence > 30 
+                              ? 'bg-gradient-to-r from-amber-600 to-amber-400' 
+                              : 'bg-gradient-to-r from-emerald-600 to-emerald-400')
+                        }`}
+                        style={{ width: `${Math.max(currentResult.syntheticConfidence, 5)}%` }}
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
                 {/* Key Forensic Indicator Badges */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-[10px]">
                   <div className="bg-[#111827] border border-[#1C273C] p-2 rounded">
                     <span className="text-slate-400 block">FFT Spectral Anomaly</span>
-                    <span className={`font-bold text-xs ${currentResult.spectralAnomalyScore > 30 ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {currentResult.spectralAnomalyScore}%
+                    <span className={`font-bold text-xs ${
+                      currentResult.spectralAnomalyScore !== null 
+                        ? (currentResult.spectralAnomalyScore > 30 ? 'text-red-400' : 'text-emerald-400')
+                        : 'text-slate-400'
+                    }`}>
+                      {currentResult.spectralAnomalyScore !== null ? `${currentResult.spectralAnomalyScore}%` : 'N/A (No Model)'}
                     </span>
                   </div>
                   <div className="bg-[#111827] border border-[#1C273C] p-2 rounded">
                     <span className="text-slate-400 block">rPPG Biometric Pulse</span>
-                    <span className={`font-bold text-xs ${currentResult.rppgPulseDetected ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {currentResult.rppgPulseDetected ? 'CONFIRMED' : 'DEAD / SYNTHETIC'}
+                    <span className={`font-bold text-xs ${
+                      currentResult.rppgPulseDetected !== null
+                        ? (currentResult.rppgPulseDetected ? 'text-emerald-400' : 'text-red-400')
+                        : 'text-slate-400'
+                    }`}>
+                      {currentResult.rppgPulseDetected !== null
+                        ? (currentResult.rppgPulseDetected ? 'CONFIRMED' : 'DEAD / SYNTHETIC')
+                        : 'N/A (No Pulse Model)'}
                     </span>
                   </div>
                   <div className="bg-[#111827] border border-[#1C273C] p-2 rounded">
@@ -412,9 +441,9 @@ export default function DeepfakeDetectionView({
                     </span>
                   </div>
                   <div className="bg-[#111827] border border-[#1C273C] p-2 rounded">
-                    <span className="text-slate-400 block">MITRE ATLAS</span>
-                    <span className="font-bold text-[9px] text-purple-300 truncate block" title={currentResult.mitreAtlasTechnique}>
-                      {currentResult.mitreAtlasTechnique.split(' ')[0]}
+                    <span className="text-slate-400 block">Entropy</span>
+                    <span className="font-bold text-xs text-purple-300">
+                      {currentResult.entropy !== undefined ? `${currentResult.entropy.toFixed(2)} / 8.0` : 'N/A'}
                     </span>
                   </div>
                 </div>

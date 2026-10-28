@@ -200,65 +200,24 @@ export function computeShannonEntropy(str: string): number {
 // 1. CLIENT EMAIL BREACH SCANNER
 export function clientLookupEmail(targetEmail: string): { scan: ScanResult } {
   const clean = targetEmail.trim().toLowerCase();
-  const domain = clean.split('@')[1] || '';
-  const scoreBreakdown: { rule: string; points: number }[] = [];
-
-  let matches: Breach[] = [];
-  if (clean.includes('adobe') || domain.includes('adobe')) {
-    matches.push(CLIENT_BREACH_DB[0]);
-  } else if (clean.includes('canva') || domain.includes('canva')) {
-    matches.push(CLIENT_BREACH_DB[1]);
-  } else if (clean.includes('linkedin') || domain.includes('linkedin') || clean.includes('yahoo')) {
-    matches.push(CLIENT_BREACH_DB[2]);
-  } else if (clean.includes('dropbox') || domain.includes('dropbox')) {
-    matches.push(CLIENT_BREACH_DB[3]);
-  } else if (clean.includes('compromised') || clean.includes('victim') || clean.includes('test') || clean.includes('user@')) {
-    matches.push(CLIENT_BREACH_DB[0]);
-    matches.push(CLIENT_BREACH_DB[2]);
-  }
-
-  let totalScore = 0;
-  for (const b of matches) {
-    const sevPts = b.severity === 'critical' ? 35 : b.severity === 'high' ? 25 : 15;
-    totalScore += sevPts;
-    scoreBreakdown.push({ rule: `Breach: ${b.Title} (${b.severity.toUpperCase()} severity)`, points: sevPts });
-
-    const dc = b.DataClasses.map(d => d.toLowerCase());
-    if (dc.some(d => d.includes('password'))) {
-      totalScore += 15;
-      scoreBreakdown.push({ rule: `Exposed Passwords in ${b.Title}`, points: 15 });
-    }
-    if (dc.some(d => d.includes('credit') || d.includes('card') || d.includes('financial'))) {
-      totalScore += 20;
-      scoreBreakdown.push({ rule: `Exposed Financial/Card Records in ${b.Title}`, points: 20 });
-    }
-  }
-
-  const riskScore = Math.min(100, totalScore);
-  const summary = `### 🔍 CyberGuard Identity Exposure Audit\n\n` +
+  const summary = `### ⚠️ CyberGuard Offline Client State\n\n` +
     `**Audited Identity**: \`${clean}\`  \n` +
-    `**Exposure Rating**: **${riskScore}/100** (${riskScore >= 70 ? '🚨 CRITICAL HAZARD' : riskScore >= 40 ? '⚠️ MEDIUM RISK' : '🟢 MINIMAL RISK'})\n` +
-    `**Breach Count**: **${matches.length}** confirmed exposures\n\n` +
-    `#### 📊 Transparent Scoring Rubric Breakdown:\n` +
-    (scoreBreakdown.length > 0 
-      ? scoreBreakdown.map(sb => `- \`${sb.rule}\`: **+${sb.points} pts**`).join('\n') 
-      : `- \`Zero Credential Exposure Recorded\`: **+0 pts**`) + `\n\n` +
-    `#### Recommended Countermeasures:\n` +
-    `1. **Enforce Password Reset**: Invalidate legacy credentials immediately.\n` +
-    `2. **Activate Hardware MFA**: Enable FIDO2 / WebAuthn security keys.\n` +
-    `3. **Session Revocation**: Invalidate active web session tokens.`;
+    `**Status**: **PENDING SERVER API**\n\n` +
+    `Live email breach verification requires connectivity to the CyberGuard backend API ` +
+    `(which connects directly to the XposedOrNot verified breach repository). ` +
+    `In accordance with CyberGuard zero-fabrication standards, no unverified breach records are fabricated offline.`;
 
   return {
     scan: {
-      id: 'scan-' + Math.random().toString(36).substring(2, 11),
+      id: `scan-offline-${Date.now()}`,
       targetEmail: clean,
       timestamp: new Date().toISOString(),
-      resultCount: matches.length,
-      breaches: matches,
-      riskScore,
+      resultCount: 0,
+      breaches: [],
+      riskScore: 0,
       forensicSummary: summary,
       aiSummary: summary,
-      scoreBreakdown
+      scoreBreakdown: [{ rule: 'Offline Client State — Awaiting Server API Verification', points: 0 }]
     }
   };
 }
@@ -417,62 +376,28 @@ export function clientAnalyzeOsint(target: string): OsintResult {
   const clean = target.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
   const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(clean);
 
-  const isSuspicious = clean.includes('tor') || clean.startsWith('185.') || clean.includes('fake') || clean.includes('xyz');
-  const finalScore = isSuspicious ? 85 : 15;
-
   return {
     target: clean,
-    resolvedIp: isIp ? clean : '185.220.101.5',
-    hostname: isIp ? `host-${clean.replace(/\./g, '-')}.security-mesh.net` : clean,
+    resolvedIp: isIp ? clean : 'Pending Server Query',
+    hostname: clean,
     location: {
-      country: isIp ? 'Germany' : 'United States',
-      city: isIp ? 'Frankfurt' : 'Ashburn',
-      isp: isIp ? 'Stiftung Erneuerbare Freiheit' : 'Cloudflare Inc. / AS13335',
-      asn: isIp ? 'ASN-20860' : 'ASN-13335',
-      flag: isIp ? '🇩🇪' : '🇺🇸'
+      country: 'Network Connection Required',
+      city: 'Awaiting Server API',
+      isp: 'Authoritative Query Pending',
+      asn: 'N/A',
+      flag: '⚠️'
     },
-    reputationScore: finalScore,
-    scoreBreakdown: isSuspicious 
-      ? [
-          { rule: 'Baseline Infrastructure Audit', points: 10 },
-          { rule: 'Tor Network Exit Node Signature Match', points: 40 },
-          { rule: 'Spamhaus Zen Blacklist Listing', points: 20 },
-          { rule: 'Exposed Management Port (RDP 3389)', points: 15 }
-        ]
-      : [
-          { rule: 'Baseline Infrastructure Audit', points: 10 },
-          { rule: 'Valid Authoritative TLS Certificate', points: 5 }
-        ],
+    reputationScore: 0,
+    scoreBreakdown: [
+      { rule: 'Client-Side Offline State — Connect to CyberGuard Server API for Live GeoIP & OSINT', points: 0 }
+    ],
     blacklists: [
-      { name: 'VirusTotal Intelligence Engine', listed: isSuspicious, category: 'Multi-Engine AV Threat' },
-      { name: 'Spamhaus Zen', listed: isSuspicious, category: 'Spam & Exploit Host' },
-      { name: 'AbuseIPDB ThreatDB', listed: isSuspicious, category: 'Brute Force & Scan' },
-      { name: 'Quad9 Security Filter', listed: isSuspicious, category: 'Phishing C2' },
-      { name: 'CyberGuard ThreatDB', listed: isSuspicious, category: 'Active OSINT Indicator' }
+      { name: 'VirusTotal ThreatDB', listed: false, category: 'Awaiting Server API' }
     ],
-    openPorts: [
-      { port: 80, service: 'HTTP', state: 'open', risk: 'low' },
-      { port: 443, service: 'HTTPS / TLS 1.3', state: 'open', risk: 'low' },
-      { port: 22, service: 'SSH', state: isSuspicious ? 'open' : 'closed', risk: 'medium' },
-      { port: 3389, service: 'RDP (Remote Desktop)', state: isSuspicious ? 'open' : 'closed', risk: 'high' }
-    ],
-    dnsRecords: [
-      { type: 'A', value: isIp ? clean : '185.220.101.45', status: 'ok' },
-      { type: 'MX', value: `mail.${clean}`, status: 'ok' },
-      { type: 'TXT', value: 'v=spf1 include:_spf.cyberguard.org ~all', status: isSuspicious ? 'warning' : 'ok' },
-      { type: 'DMARC', value: 'v=DMARC1; p=reject; rua=mailto:dmarc-reports@cyberguard.org', status: isSuspicious ? 'missing' : 'ok' }
-    ],
-    sslCert: {
-      valid: !isSuspicious,
-      issuer: isSuspicious ? "Let's Encrypt Authority (Untrusted)" : 'DigiCert TLS RSA SHA256 2026 CA1',
-      expiresInDays: 45,
-      cipher: 'TLS_AES_256_GCM_SHA384 (256-bit AES)',
-      sanDomains: [clean, `www.${clean}`]
-    },
-    threatCategories: isSuspicious 
-      ? ['Command & Control Server (C2)', 'Tor Exit Node', 'High Risk ASN'] 
-      : ['Standard Cloud Asset', 'Verified Domain Name'],
-    investigatorNotes: `OSINT Resolution generated by CyberGuard Deterministic SOC Engine. Threat index evaluated at ${finalScore}/100.`,
+    openPorts: [],
+    dnsRecords: [],
+    threatCategories: ['Awaiting Live Network Resolution'],
+    investigatorNotes: `Client offline state: Authoritative IP Geolocation, ASN, DNS, and VirusTotal reputation lookups require an active connection to the CyberGuard server API. In accordance with honest security principles, locations are NEVER fabricated.`,
     timestamp: new Date().toISOString()
   };
 }
@@ -811,63 +736,19 @@ export function clientAnalyzeDeepfake(targetName: string, mediaType: string = 'i
     }
   }
 
-  const isAudio = mediaType === 'audio' || nameClean.endsWith('.mp3') || nameClean.endsWith('.wav') || nameClean.includes('voice') || detectedFormat === 'MP3';
-  const isVideo = mediaType === 'video' || nameClean.endsWith('.mp4') || nameClean.endsWith('.webm') || nameClean.includes('video') || nameClean.includes('stream') || detectedFormat === 'MP4';
-
+  const isAudio = mediaType === 'audio' || nameClean.endsWith('.mp3') || nameClean.endsWith('.wav') || detectedFormat === 'MP3' || detectedFormat === 'WAV';
+  const isVideo = mediaType === 'video' || nameClean.endsWith('.mp4') || nameClean.endsWith('.webm') || detectedFormat === 'MP4';
   const hasGenerativeMetadata = generativeMetadataDetected.length > 0;
-  const isSyntheticFlag = hasGenerativeMetadata || nameClean.includes('synth') || nameClean.includes('deepfake') || nameClean.includes('clone') || nameClean.includes('ai') || nameClean.includes('gen') || nameClean.includes('sample');
-  const isCleanOriginal = !hasGenerativeMetadata && (nameClean.includes('clean') || nameClean.includes('original') || nameClean.includes('authentic') || nameClean.includes('lead'));
-
-  let syntheticConfidence = 0;
-  let classification: 'AUTHENTIC_ORIGINAL' | 'SUSPICIOUS_HYBRID' | 'SYNTHETIC_DEEPFAKE' | 'VOICE_CLONE_INJECTION' = 'AUTHENTIC_ORIGINAL';
-  let spectralAnomalyScore = 0;
-  let rppgPulseDetected = true;
-  let rppgConfidence = 98;
   const redFlags: string[] = [];
 
   if (hasGenerativeMetadata) {
-    syntheticConfidence = isAudio ? 97 : 98;
-    classification = isAudio ? 'VOICE_CLONE_INJECTION' : 'SYNTHETIC_DEEPFAKE';
-    spectralAnomalyScore = 92.4;
-    rppgPulseDetected = false;
-    rppgConfidence = 6.2;
-    redFlags.push(`Embedded AI Generative Metadata Discovered: Found parameter signatures (${generativeMetadataDetected.join(', ')}).`);
-    redFlags.push('FFT Spectral Phase Checkerboard: High-frequency transposing artifacts confirmed across latent lattice.');
-    redFlags.push('Synthetic Biological Failure: Remote Photoplethysmography (rPPG) detected zero subdermal blood flow pulsation.');
-  } else if (isSyntheticFlag && !isCleanOriginal) {
-    syntheticConfidence = isAudio ? 94 : 96;
-    classification = isAudio ? 'VOICE_CLONE_INJECTION' : 'SYNTHETIC_DEEPFAKE';
-    spectralAnomalyScore = 88.5;
-    rppgPulseDetected = false;
-    rppgConfidence = 12.4;
-
-    if (isAudio) {
-      redFlags.push('Neural Voice Formant Jitter: Unnatural phase coherence detected in high-frequency spectrum (4kHz-8kHz).');
-      redFlags.push('Zero Micro-Involuntary Breaths: Waveform exhibits discontinuous zero-crossing spectral cuts.');
-      redFlags.push('Synthetic Prosody Archetype: Matches XTTS-v3 / Neural-Voice-Clone 2030 latent model signature.');
-    } else {
-      redFlags.push('FFT Spectral Checkerboard Anomaly: Periodic Fourier peaks indicating transposed convolution upsampling.');
-      redFlags.push('Synthetic Biological Failure: Remote Photoplethysmography (rPPG) detected zero subdermal blood pulse hemoglobin variation.');
-      redFlags.push('Pupillary & Iris Geometry Disparity: Corneal reflection ray-tracing inconsistency (> 28° deviation).');
-      redFlags.push('Latent Warp Boundary: High-gradient blur artifacts detected along facial perimeter mesh.');
-    }
-  } else if (!isCleanOriginal) {
-    syntheticConfidence = 45;
-    classification = 'SUSPICIOUS_HYBRID';
-    spectralAnomalyScore = 42.0;
-    rppgPulseDetected = true;
-    rppgConfidence = 64.0;
-    redFlags.push('Minor high-frequency compression artifacts observed; biological vitals within acceptable margins.');
-  } else {
-    syntheticConfidence = 4;
-    classification = 'AUTHENTIC_ORIGINAL';
-    spectralAnomalyScore = 3.2;
-    rppgPulseDetected = true;
-    rppgConfidence = 99.1;
+    redFlags.push(`Embedded AI Generator Signatures: File header contains generative parameters (${generativeMetadataDetected.join(', ')}).`);
   }
 
+  const timestamp = new Date().toISOString();
+
   return {
-    targetName: targetName || 'executive_media_artifact.png',
+    targetName: targetName || 'uploaded_media_payload.bin',
     mediaType: isAudio ? 'audio' : (isVideo ? 'video' : 'image'),
     fileSizeBytes,
     sha256Hash,
@@ -875,24 +756,48 @@ export function clientAnalyzeDeepfake(targetName: string, mediaType: string = 'i
     entropy,
     detectedFormat: detectedFormat !== 'UNKNOWN' ? detectedFormat : undefined,
     generativeMetadataDetected: generativeMetadataDetected.length > 0 ? generativeMetadataDetected : undefined,
-    syntheticConfidence,
-    classification,
-    spectralAnomalyScore,
-    rppgPulseDetected,
-    rppgConfidence,
-    voiceJitterVariance: isAudio ? (syntheticConfidence > 80 ? 0.042 : 0.884) : undefined,
-    detectedGenerativeArchetype: syntheticConfidence > 80 
-      ? (isAudio ? 'Generative Neural Voice Clone (Diffusion-Acoustic v4)' : 'Generative Diffusion Latent Mesh (SD-Next 2030)') 
-      : 'Natural Sensor Photon Stream (Sony Exmor Sensor / Electro-Dynamic Mic)',
+    classification: hasGenerativeMetadata ? 'METADATA_AI_INDICATOR' : 'UNVERIFIED_NO_INFERENCE_ENGINE',
+    modelStatus: 'UNAVAILABLE / NOT CONFIGURED',
+    syntheticConfidence: null,
+    spectralAnomalyScore: null,
+    rppgPulseDetected: null,
+    rppgConfidence: null,
+    detectedGenerativeArchetype: hasGenerativeMetadata 
+      ? `AI Tool Parameters Identified: ${generativeMetadataDetected[0]}` 
+      : 'Neural Deepfake Classification Model Not Configured',
     redFlags,
     forensicEvidence: [
-      { metric: 'FFT Frequency Phase Coherence', measured: `${spectralAnomalyScore}% Anomaly`, baseline: '< 10% Normal', status: spectralAnomalyScore > 30 ? 'anomaly' : 'clean' },
-      { metric: 'rPPG Subdermal Pulse Variance', measured: rppgPulseDetected ? `${rppgConfidence}% Verified Bio-Pulse` : '0% (Dead Synthetic Signal)', baseline: '> 85% Natural', status: rppgPulseDetected ? 'clean' : 'anomaly' },
-      { metric: 'Corneal Ray-Tracing Saliency', measured: syntheticConfidence > 70 ? 'Inconsistent Multi-Source Glint' : 'Parallax Symmetrical', baseline: 'Coherent Ambient Match', status: syntheticConfidence > 70 ? 'anomaly' : 'clean' },
-      { metric: 'Audio Formant Phase Entropy', measured: isAudio ? (syntheticConfidence > 70 ? '3.12 Bits (Artificial)' : '7.45 Bits (Organic)') : 'N/A (Visual Mode)', baseline: '> 7.0 Bits Organic', status: (isAudio && syntheticConfidence > 70) ? 'anomaly' : 'clean' }
+      {
+        metric: 'Cryptographic SHA-256 Hash',
+        measured: sha256Hash ? `${sha256Hash.substring(0, 16)}...` : 'Not computed',
+        baseline: 'Deterministic 256-bit hash',
+        status: sha256Hash ? 'clean' : 'anomaly'
+      },
+      {
+        metric: 'Shannon Information Entropy',
+        measured: entropy !== undefined ? `${entropy} / 8.00` : 'Not measured',
+        baseline: 'Uncompressed binary density',
+        status: 'clean'
+      },
+      {
+        metric: 'Magic Byte File Format',
+        measured: detectedFormat !== 'UNKNOWN' ? `${detectedFormat} Verified` : 'Unrecognized Container',
+        baseline: 'Valid RFC MIME magic bytes',
+        status: detectedFormat !== 'UNKNOWN' ? 'clean' : 'anomaly'
+      },
+      {
+        metric: 'Generative AI Metadata Tags',
+        measured: hasGenerativeMetadata ? `Flagged (${generativeMetadataDetected.join(', ')})` : 'Zero Generative Signatures in Headers',
+        baseline: 'No generative prompt strings',
+        status: hasGenerativeMetadata ? 'anomaly' : 'clean'
+      }
     ],
-    mitreAtlasTechnique: isAudio ? 'AML.T0043.002 (Deepfake Audio Speech Synthesis)' : 'AML.T0043.001 (Generative Synthetic Visual Impersonation)',
-    timestamp: new Date().toISOString()
+    investigatorNotes: `Binary properties, SHA-256 hash, and EXIF/header strings were successfully inspected. ` +
+      `Neural deepfake classification model is NOT configured on this instance. ` +
+      `In adherence to CyberGuard zero-fabrication standards, no synthetic probability percentage was simulated.`,
+    limitations: 'Static binary heuristics only. Reliable deepfake detection requires an active GPU neural inference engine or third-party deepfake model API.',
+    mitreAtlasTechnique: 'AML.T0043 (Craft Adversarial Data)',
+    timestamp
   };
 }
 

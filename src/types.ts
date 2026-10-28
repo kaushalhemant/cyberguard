@@ -252,16 +252,19 @@ export interface DeepfakeForensicsResult {
   md5Hash?: string;
   entropy?: number;
   detectedFormat?: string;
-  syntheticConfidence: number; // 0 (100% Authentic) to 100 (100% Generative Synthetic)
-  classification: 'AUTHENTIC_ORIGINAL' | 'SUSPICIOUS_HYBRID' | 'SYNTHETIC_DEEPFAKE' | 'VOICE_CLONE_INJECTION';
-  spectralAnomalyScore: number; // FFT frequency phase distortion
-  rppgPulseDetected: boolean; // Remote Photoplethysmography micro-blood flow
-  rppgConfidence: number;
+  modelStatus?: string;
+  limitations?: string;
+  syntheticConfidence: number | null; // null when neural model is not configured
+  classification: 'AUTHENTIC_ORIGINAL' | 'SUSPICIOUS_HYBRID' | 'SYNTHETIC_DEEPFAKE' | 'VOICE_CLONE_INJECTION' | 'METADATA_AI_INDICATOR' | 'UNVERIFIED_NO_INFERENCE_ENGINE' | string;
+  spectralAnomalyScore: number | null; // null when neural model is not configured
+  rppgPulseDetected: boolean | null; // null when neural model is not configured
+  rppgConfidence: number | null;
   voiceJitterVariance?: number;
-  detectedGenerativeArchetype: string; // e.g., 'Diffusion Latent Warp v8', 'Neural Voice Formant Synth'
+  detectedGenerativeArchetype: string;
   generativeMetadataDetected?: string[];
   redFlags: string[];
   forensicEvidence: { metric: string; measured: string; baseline: string; status: 'clean' | 'anomaly' }[];
+  investigatorNotes?: string;
   mitreAtlasTechnique: string;
   timestamp: string;
 }
